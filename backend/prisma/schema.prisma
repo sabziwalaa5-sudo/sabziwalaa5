@@ -1,0 +1,167 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  CUSTOMER
+  VENDOR
+  DELIVERY_PARTNER
+  ADMIN
+}
+
+enum OrderStatus {
+  PLACED
+  ACCEPTED
+  PACKED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  REJECTED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  COD
+  UPI
+  CARD
+  WALLET
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id           String        @id @default(uuid()) @db.Uuid
+  phone        String        @unique
+  email        String?       @unique
+  passwordHash String?
+  role         Role          @default(CUSTOMER)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  profile      Profile?
+  orders       Order[]       @relation("CustomerOrders")
+  vendorProfile Vendor?
+  deliveryProfile DeliveryPartner?
+  reviews      Review[]
+}
+
+model Profile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  fullName  String
+  avatarUrl String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Vendor {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @unique @db.Uuid
+  storeName    String
+  isActive     Boolean   @default(true)
+  latitude     Decimal   @db.Decimal(9, 6)
+  longitude    Decimal   @db.Decimal(9, 6)
+  documentsUrl String?
+  commissionPct Decimal  @default(10.0) @db.Decimal(4, 2)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products     Product[]
+  orders       Order[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model DeliveryPartner {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @unique @db.Uuid
+  isOnline   Boolean  @default(false)
+  latitude   Decimal  @db.Decimal(9, 6)
+  longitude  Decimal  @db.Decimal(9, 6)
+  vehicleType String  // e.g. 'Bicycle', 'Bike'
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders     Order[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Product {
+  id          String      @id @default(uuid()) @db.Uuid
+  vendorId    String      @db.Uuid
+  nameEn      String
+  nameHi      String
+  descriptionEn String?
+  descriptionHi String?
+  price       Decimal     @db.Decimal(10, 2)
+  unit        String      // e.g., '1 kg', '500 g'
+  imageUrl    String?
+  category    String      @default("Vegetable")
+  stockQty    Decimal     @default(0.0) @db.Decimal(10, 2)
+  vendor      Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Order {
+  id                String           @id @default(uuid()) @db.Uuid
+  customerId        String           @db.Uuid
+  vendorId          String           @db.Uuid
+  deliveryPartnerId String?          @db.Uuid
+  status            OrderStatus      @default(PLACED)
+  deliveryAddress   String
+  latitude          Decimal          @db.Decimal(9, 6)
+  longitude         Decimal          @db.Decimal(9, 6)
+  distanceKm        Decimal          @db.Decimal(4, 2)
+  totalAmount       Decimal          @db.Decimal(10, 2)
+  commissionAmount  Decimal          @default(0.0) @db.Decimal(10, 2)
+  driverPayoutAmount Decimal         @default(0.0) @db.Decimal(10, 2)
+  customer          User             @relation("CustomerOrders", fields: [customerId], references: [id])
+  vendor            Vendor           @relation(fields: [vendorId], references: [id])
+  deliveryPartner   DeliveryPartner? @relation(fields: [deliveryPartnerId], references: [id])
+  orderItems        OrderItem[]
+  payment           Payment?
+  reviews           Review[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+}
+
+model OrderItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  orderId      String   @db.Uuid
+  productId    String?  @db.Uuid
+  quantity     Decimal  @db.Decimal(10, 2)
+  pricePerUnit Decimal  @db.Decimal(10, 2)
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+}
+
+model Payment {
+  id            String        @id @default(uuid()) @db.Uuid
+  orderId       String        @unique @db.Uuid
+  method        PaymentMethod @default(COD)
+  status        PaymentStatus @default(PENDING)
+  amount        Decimal       @db.Decimal(10, 2)
+  transactionId String?
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Review {
+  id                String   @id @default(uuid()) @db.Uuid
+  orderId           String   @db.Uuid
+  userId            String   @db.Uuid
+  rating            Int      // 1 to 5
+  reviewText        String?
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+}

@@ -1,0 +1,23 @@
+# Node modules
+node_modules/
+
+# Next.js build output & cache
+web/.next/
+web/out/
+*.tsbuildinfo
+
+# Backend build output
+backend/dist/
+
+# Env files (contains sensitive tokens/keys)
+.env
+.env.local
+.env.vercel
+.env.vercel.prod
+
+# Docker data
+pgdata/
+
+# OS specific files
+.DS_Store
+Thumbs.db

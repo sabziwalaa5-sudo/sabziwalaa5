@@ -1,0 +1,24 @@
+{
+  "name": "SABJIWALAA ५ - Hyperlocal Marketplace",
+  "short_name": "Sabjiwala",
+  "description": "Next-gen hyperlocal vegetable and grocery marketplace with sub-minute routing and real-time live order tracking.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#15803d",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/images/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

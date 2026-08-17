@@ -75,7 +75,7 @@ export class OrderController {
         totalAmount: items.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0),
         status: "PLACED",
         paymentMethod,
-        paymentStatus: paymentMethod === "COD" ? "PENDING" : "PAID",
+        paymentStatus: "PENDING",
         createdAt: new Date().toISOString()
       };
 

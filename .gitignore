@@ -18,6 +18,17 @@ backend/dist/
 # Docker data
 pgdata/
 
+# Native build artifacts
+web/android/.gradle/
+web/android/app/build/
+web/android/build/
+web/android/local.properties
+web/android/key.properties
+web/android/*.keystore
+web/ios/App/Pods/
+web/ios/App/App.xcworkspace/xcuserdata/
+web/ios/DerivedData/
+
 # OS specific files
 .DS_Store
 Thumbs.db

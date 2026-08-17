@@ -4,7 +4,13 @@ import http from "http";
 export function setupSockets(server: http.Server) {
   const io = new Server(server, {
     cors: {
-      origin: "*",
+      origin: [
+        "https://web-sabziwalaa5.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "capacitor://localhost",
+        "https://localhost",
+      ],
       methods: ["GET", "POST"]
     }
   });
@@ -21,9 +27,6 @@ export function setupSockets(server: http.Server) {
     // Update driver coordinates
     socket.on("update_driver_location", (data: { orderId: string; latitude: number; longitude: number }) => {
       const { orderId, latitude, longitude } = data;
-      console.log(`[Socket.IO] Location update for Order ${orderId}: ${latitude}, ${longitude}`);
-      
-      // Broadcast coordinates to all clients in the order room (customer, vendor, admin)
       io.to(`order:${orderId}`).emit("driver_location_changed", {
         latitude,
         longitude,

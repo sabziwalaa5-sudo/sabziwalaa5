@@ -53,7 +53,9 @@ jobs:
           cd web
           npm ci
 
-      - name: Build Next.js Application
+      - name: Typecheck, test, and build
         run: |
           cd web
+          npm run type-check
+          npm test
           npm run build

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sabjiwala</string>
+    <string name="title_activity_main">Sabjiwala</string>
+    <string name="package_name">com.sabjiwala.app</string>
+    <string name="custom_url_scheme">com.sabjiwala.app</string>
+</resources>

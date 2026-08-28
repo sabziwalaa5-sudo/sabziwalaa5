@@ -3,8 +3,10 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
-import { validateOrder, validateCouponCode } from "../lib/validation";
+import { validateOrder, validateCouponCode, validateEmail } from "../lib/validation";
 import { RateLimits } from "../lib/rateLimiter";
+import { buildCartItems, computeBill, nextCartQuantity, orderFingerprint } from "../lib/orderEngine";
+import { createPaymentOnServer, displayPaymentMethod, verifyPaymentOnServer } from "../lib/paymentClient";
 import {
   ShoppingBag,
   MapPin,
@@ -56,6 +58,14 @@ export default function Home() {
   const [cartOpen, setCartOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginRequiredFor, setLoginRequiredFor] = useState<string>("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [placingOrder, setPlacingOrder] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
+  const lastOrderFingerprint = useRef("");
+  const lastOrderAt = useRef(0);
 
   // Auth State
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -170,9 +180,45 @@ export default function Home() {
       });
       if (error) throw error;
     } catch (err: any) {
-      setAuthError(err.message || 'Google Sign-In failed');
-      setUserEmail("demo_customer@gmail.com");
-      setUserRole("customer");
+      setAuthError(err.message || "Google Sign-In failed. Use email login instead.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const emailCheck = validateEmail(loginEmail);
+    if (!emailCheck.valid) {
+      setAuthError(emailCheck.error || "Invalid email");
+      return;
+    }
+    if (!loginPassword || loginPassword.length < 6) {
+      setAuthError("Password must be at least 6 characters");
+      return;
+    }
+    if (!RateLimits.signIn(emailCheck.sanitized).allowed) {
+      setAuthError("Too many sign-in attempts. Please wait and try again.");
+      return;
+    }
+
+    try {
+      setAuthLoading(true);
+      setAuthError(null);
+      const action = isRegistering
+        ? supabase.auth.signUp({ email: emailCheck.sanitized, password: loginPassword })
+        : supabase.auth.signInWithPassword({ email: emailCheck.sanitized, password: loginPassword });
+      const { data, error } = await action;
+      if (error) throw error;
+      if (data.user?.email) {
+        setUserEmail(data.user.email);
+        setUserRole("customer");
+        setShowLoginModal(false);
+      } else if (isRegistering) {
+        setAuthError("Check your email to confirm the account, then sign in.");
+      }
+    } catch (err: any) {
+      setAuthError(err.message || "Authentication failed");
     } finally {
       setAuthLoading(false);
     }
@@ -209,7 +255,24 @@ export default function Home() {
     setShowMapModal(false);
   };
 
-  const handleGPSDetect = () => {
+  const handleGPSDetect = async () => {
+    try {
+      const { Capacitor } = await import("@capacitor/core");
+      if (Capacitor.isNativePlatform()) {
+        const { Geolocation } = await import("@capacitor/geolocation");
+        const perm = await Geolocation.requestPermissions();
+        if (perm.location === "denied") {
+          updateLocation("Rajokri, New Delhi", 28.5284, 77.1028);
+          return;
+        }
+        const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 8000 });
+        updateLocation("GPS Location", pos.coords.latitude, pos.coords.longitude);
+        return;
+      }
+    } catch {
+      // Fall through to browser geolocation.
+    }
+
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -236,10 +299,21 @@ export default function Home() {
 
   // Cart operations
   const addToCart = (productId: string) => {
-    setCart((prev) => ({
-      ...prev,
-      [productId]: (prev[productId] || 0) + 1
-    }));
+    const product = productsList.find((p) => p.id === productId);
+    if (!product) return;
+    if ((product.stock || 0) <= 0) {
+      alert("This product is currently unavailable.");
+      return;
+    }
+    setCart((prev) => {
+      const nextQty = nextCartQuantity(prev[productId] || 0, 1, product.stock);
+      if (nextQty <= 0) return prev;
+      if (nextQty === (prev[productId] || 0)) {
+        alert(`Only ${product.stock} units available.`);
+        return prev;
+      }
+      return { ...prev, [productId]: nextQty };
+    });
   };
 
   const removeFromCart = (productId: string) => {
@@ -320,106 +394,256 @@ export default function Home() {
 
   // Order Placement logic
   const handlePlaceOrder = async () => {
+    if (placingOrder) return;
     if (!userEmail) {
       setLoginRequiredFor("checkout");
       setShowLoginModal(true);
       return;
     }
 
-    if (Object.keys(cart).length === 0) return;
-
-    if (!RateLimits.placeOrder(userEmail).allowed) {
-      alert("Rate limit exceeded. Please wait a moment before placing another order.");
+    if (isOutOfRange) {
+      setCheckoutError("Delivery is unavailable for the selected location.");
       return;
     }
 
-    const cartItems = Object.entries(cart).map(([id, qty]) => {
-      const prod = productsList.find((p) => p.id === id);
-      return {
-        productId: id,
-        name: prod?.name || "Organic Item",
-        qty,
-        price: prod?.price || 0,
-        subtotal: (prod?.price || 0) * qty
-      };
+    const cartItems = buildCartItems(cart, productsList);
+    if (cartItems.length === 0) {
+      setCheckoutError("Your cart is empty or contains unavailable items.");
+      return;
+    }
+
+    if (!RateLimits.placeOrder(userEmail).allowed) {
+      setCheckoutError("Rate limit exceeded. Please wait a moment before placing another order.");
+      return;
+    }
+
+    const wallet = wallets[userEmail] || { pointsBalance: 0, lifetimeEarned: 0, lifetimeRedeemed: 0, history: [] };
+    const safeRedeem = Math.max(0, Math.min(redeemedPointsInput || 0, wallet.pointsBalance, getCartTotal()));
+    const subtotal = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
+    const couponDiscount = getCouponDiscount();
+    const bill = computeBill({
+      subtotal,
+      couponDiscount,
+      redeemedPoints: safeRedeem,
+      deliveryCharge,
+      freeDeliveryThreshold: 200,
     });
 
-    const subtotal = getCartTotal();
-    const discount = getCouponDiscount() + redeemedPointsInput;
-    const finalDeliveryCharge = subtotal - discount > 200 || subtotal === 0 ? 0 : deliveryCharge;
-    const totalAmount = Math.max(0, subtotal - discount) + finalDeliveryCharge;
+    if (subtotal < minOrderValue) {
+      setCheckoutError(`Minimum order value is ₹${minOrderValue}.`);
+      return;
+    }
+
+    const defaultAddress = addresses.find((a) => a.isDefault)?.address || locationName;
+    const orderDraftId = `SBJ${Date.now().toString().slice(-8)}`;
+    const fingerprint = orderFingerprint({
+      email: userEmail,
+      items: cartItems,
+      totalAmount: bill.totalAmount,
+    });
+    if (fingerprint === lastOrderFingerprint.current && Date.now() - lastOrderAt.current < 60000) {
+      setCheckoutError("Duplicate order blocked. Please wait a minute before retrying the same cart.");
+      return;
+    }
 
     const orderPayload = {
-      id: `SBJ${Math.floor(10000 + Math.random() * 90000)}`,
+      id: orderDraftId,
       date: new Date().toLocaleString("en-IN"),
       customerName: userEmail.split("@")[0],
       customerEmail: userEmail,
       customerMobile: "9876543210",
-      deliveryAddress: addresses.find((a) => a.isDefault)?.address || locationName,
-      paymentMethod: paymentMode === "cod" ? "Cash on Delivery" : paymentMode === "upi" ? "UPI Payment" : "Card Payment",
-      paymentStatus: paymentMode === "cod" ? "Pending" : "Paid",
+      deliveryAddress: defaultAddress,
+      paymentMethod: displayPaymentMethod(paymentMode),
+      paymentStatus: paymentMode === "cod" ? "Pending" : "Pending",
       orderStatus: "Pending",
       items: cartItems,
       subtotal,
-      deliveryCharges: finalDeliveryCharge,
-      discount,
-      totalAmount,
-      vendorId: vendorsList[0]?.vendor_id || "v1"
+      deliveryCharges: bill.deliveryCharges,
+      discount: bill.discount,
+      totalAmount: bill.totalAmount,
+      vendorId: vendorsList[0]?.vendor_id || "v1",
+      paymentId: "",
     };
 
     const valResult = validateOrder(orderPayload);
     if (!valResult.valid) {
-      alert(`Order validation failed: ${valResult.errors.join(", ")}`);
+      setCheckoutError(`Order validation failed: ${valResult.errors.join(", ")}`);
       return;
     }
 
+    setPlacingOrder(true);
+    setCheckoutError("");
 
-    // Add to local state
-    const updatedOrders = [orderPayload, ...ordersList];
-    setOrdersList(updatedOrders);
-    setStoredState(STATE_KEYS.ORDERS, updatedOrders);
-    setActiveOrder(orderPayload);
-
-    // Update wallet reward points
-    const pointsEarned = Math.floor(totalAmount / 10);
-    const existingWallet = wallets[userEmail] || { pointsBalance: 0, lifetimeEarned: 0, lifetimeRedeemed: 0, history: [] };
-    const newBalance = existingWallet.pointsBalance - redeemedPointsInput + pointsEarned;
-    const updatedWallet = {
-      ...existingWallet,
-      pointsBalance: newBalance,
-      lifetimeEarned: existingWallet.lifetimeEarned + pointsEarned,
-      lifetimeRedeemed: existingWallet.lifetimeRedeemed + redeemedPointsInput,
-      history: [
-        ...existingWallet.history,
-        ...(redeemedPointsInput > 0 ? [{ id: `tx_${Date.now()}_r`, type: "REDEEMED", points: redeemedPointsInput, orderId: orderPayload.id, date: orderPayload.date, balance: existingWallet.pointsBalance - redeemedPointsInput }] : []),
-        { id: `tx_${Date.now()}_e`, type: "EARNED", points: pointsEarned, orderId: orderPayload.id, date: orderPayload.date, balance: newBalance }
-      ]
-    };
-
-    const updatedWallets = { ...wallets, [userEmail]: updatedWallet };
-    setWallets(updatedWallets);
-    setStoredState(STATE_KEYS.WALLETS, updatedWallets);
-
-    // Reset cart
-    setCart({});
-    setCartOpen(false);
-    setAppliedCoupon(null);
-    setRedeemedPointsInput(0);
-    setCustomerSubTab("orders");
-
-    // Optional Supabase async insert
     try {
-      await supabase.from("orders").insert([
-        {
-          id: orderPayload.id,
-          customer_email: orderPayload.customerEmail,
-          total_amount: orderPayload.totalAmount,
-          order_status: orderPayload.orderStatus,
-          created_at: new Date().toISOString()
+      let paymentStatus = "Pending";
+      let paymentId = "";
+
+      if (paymentMode === "cod") {
+        try {
+          const created = await createPaymentOnServer({
+            orderDraftId,
+            amountRupees: bill.totalAmount,
+            method: "cod",
+          });
+          const verified = await verifyPaymentOnServer({
+            paymentId: created.paymentId,
+            checkoutToken: created.checkoutToken,
+            outcome: "success",
+          });
+          paymentId = verified.paymentId;
+          paymentStatus = "Pending";
+        } catch {
+          paymentStatus = "Pending";
         }
-      ]);
-    } catch (e) {
-      console.log("Supabase insert skipped (running in local mode).");
+      } else {
+        const created = await createPaymentOnServer({
+          orderDraftId,
+          amountRupees: bill.totalAmount,
+          method: paymentMode,
+        });
+        if (!created.gatewayConfigured || !created.razorpayKeyId) {
+          throw new Error("Online payments are not configured on the server. Use Cash on Delivery or retry after gateway setup.");
+        }
+
+        const verified = await new Promise<{ paymentId: string; status: string }>((resolve, reject) => {
+          const scriptId = "razorpay-checkout-js";
+          const startCheckout = () => {
+            const RazorpayCtor = (window as any).Razorpay;
+            if (!RazorpayCtor) {
+              reject(new Error("Unable to load payment checkout"));
+              return;
+            }
+            const rzp = new RazorpayCtor({
+              key: created.razorpayKeyId,
+              amount: created.amountPaise,
+              currency: "INR",
+              name: "Sabjiwala",
+              description: `Order ${orderDraftId}`,
+              order_id: created.razorpayOrderId,
+              handler: async (response: any) => {
+                try {
+                  const result = await verifyPaymentOnServer({
+                    paymentId: created.paymentId,
+                    checkoutToken: created.checkoutToken,
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_signature: response.razorpay_signature,
+                    outcome: "success",
+                  });
+                  if (result.status !== "PAID") {
+                    reject(new Error("Payment was not verified by the server"));
+                    return;
+                  }
+                  resolve({ paymentId: result.paymentId, status: result.status });
+                } catch (err: any) {
+                  reject(err);
+                }
+              },
+              modal: {
+                ondismiss: async () => {
+                  await verifyPaymentOnServer({
+                    paymentId: created.paymentId,
+                    checkoutToken: created.checkoutToken,
+                    outcome: "cancelled",
+                  }).catch(() => undefined);
+                  reject(new Error("Payment cancelled"));
+                },
+              },
+            });
+            rzp.on("payment.failed", async () => {
+              await verifyPaymentOnServer({
+                paymentId: created.paymentId,
+                checkoutToken: created.checkoutToken,
+                outcome: "failure",
+              }).catch(() => undefined);
+              reject(new Error("Payment failed"));
+            });
+            rzp.open();
+          };
+
+          if ((window as any).Razorpay) {
+            startCheckout();
+            return;
+          }
+          if (document.getElementById(scriptId)) {
+            startCheckout();
+            return;
+          }
+          const script = document.createElement("script");
+          script.id = scriptId;
+          script.src = "https://checkout.razorpay.com/v1/checkout.js";
+          script.onload = startCheckout;
+          script.onerror = () => reject(new Error("Unable to load payment checkout"));
+          document.body.appendChild(script);
+        });
+
+        paymentId = verified.paymentId;
+        paymentStatus = verified.status === "PAID" ? "Paid" : "Pending";
+        if (paymentStatus !== "Paid") {
+          throw new Error("Payment verification failed");
+        }
+      }
+
+      orderPayload.paymentStatus = paymentStatus;
+      orderPayload.paymentId = paymentId;
+
+      const updatedOrders = [orderPayload, ...ordersList];
+      setOrdersList(updatedOrders);
+      setStoredState(STATE_KEYS.ORDERS, updatedOrders);
+      setActiveOrder(orderPayload);
+      lastOrderFingerprint.current = fingerprint;
+      lastOrderAt.current = Date.now();
+
+      const pointsEarned = Math.floor(bill.totalAmount / 10);
+      const newBalance = wallet.pointsBalance - safeRedeem + pointsEarned;
+      const updatedWallet = {
+        ...wallet,
+        pointsBalance: newBalance,
+        lifetimeEarned: wallet.lifetimeEarned + pointsEarned,
+        lifetimeRedeemed: wallet.lifetimeRedeemed + safeRedeem,
+        history: [
+          ...wallet.history,
+          ...(safeRedeem > 0 ? [{ id: `tx_${Date.now()}_r`, type: "REDEEMED", points: safeRedeem, orderId: orderPayload.id, date: orderPayload.date, balance: wallet.pointsBalance - safeRedeem }] : []),
+          { id: `tx_${Date.now()}_e`, type: "EARNED", points: pointsEarned, orderId: orderPayload.id, date: orderPayload.date, balance: newBalance }
+        ]
+      };
+
+      const updatedWallets = { ...wallets, [userEmail]: updatedWallet };
+      setWallets(updatedWallets);
+      setStoredState(STATE_KEYS.WALLETS, updatedWallets);
+
+      const stockUpdated = productsList.map((product) => {
+        const purchased = cartItems.find((item) => item.productId === product.id);
+        if (!purchased) return product;
+        return { ...product, stock: Math.max(0, (product.stock || 0) - purchased.qty) };
+      });
+      setProductsList(stockUpdated);
+      setStoredState(STATE_KEYS.PRODUCTS, stockUpdated);
+
+      setCart({});
+      setCartOpen(false);
+      setAppliedCoupon(null);
+      setRedeemedPointsInput(0);
+      setCustomerSubTab("orders");
+
+      try {
+        await supabase.from("orders").insert([
+          {
+            id: orderPayload.id,
+            customer_email: orderPayload.customerEmail,
+            total_amount: orderPayload.totalAmount,
+            order_status: orderPayload.orderStatus,
+            payment_status: orderPayload.paymentStatus,
+            created_at: new Date().toISOString()
+          }
+        ]);
+      } catch {
+        console.log("Supabase insert skipped (running in local mode).");
+      }
+    } catch (err: any) {
+      setCheckoutError(err.message || "Checkout failed. Your card/UPI was not charged as paid.");
+    } finally {
+      setPlacingOrder(false);
     }
   };
 
@@ -513,7 +737,7 @@ export default function Home() {
             {userEmail ? (
               <button onClick={handleSignOut} className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: "13px" }}>Sign Out</button>
             ) : (
-              <button onClick={handleGoogleSignIn} className="btn btn-green-outline" style={{ padding: "8px 16px", fontSize: "13px" }}>Sign In</button>
+            <button onClick={() => { setLoginRequiredFor("account"); setShowLoginModal(true); }} className="btn btn-green-outline" style={{ padding: "8px 16px", fontSize: "13px" }}>Sign In</button>
             )}
           </div>
         </div>
@@ -538,7 +762,7 @@ export default function Home() {
               {userEmail.charAt(0).toUpperCase()}
             </div>
           ) : (
-            <button onClick={handleGoogleSignIn} className="btn btn-primary" style={{ padding: "6px 14px", fontSize: "12px", height: "34px", borderRadius: "var(--r-md)" }}>Sign In</button>
+            <button onClick={() => { setLoginRequiredFor("account"); setShowLoginModal(true); }} className="btn btn-primary" style={{ padding: "6px 14px", fontSize: "12px", height: "34px", borderRadius: "var(--r-md)" }}>Sign In</button>
           )}
         </div>
       </header>
@@ -682,7 +906,7 @@ export default function Home() {
                       const itemQty = cart[prod.id] || 0;
                       return (
                         <div key={prod.id} className="product-card animate-fade-up">
-                          <div className="product-image-wrap">
+                          <div className="product-image-wrap" onClick={() => setSelectedProduct(prod)} style={{ cursor: "pointer" }}>
                             <img src={prod.imageUrl} alt={prod.name} loading="lazy" />
                             {prod.badge && (
                               <span className={`badge ${prod.badge === "organic" ? "badge-organic" : "badge-bestseller"}`} style={{ position: "absolute", top: "10px", left: "10px", zIndex: 2 }}>
@@ -769,12 +993,18 @@ export default function Home() {
                   </h3>
                   <span className="t-caption">{filteredProducts.length} items available</span>
                 </div>
+                {filteredProducts.length === 0 ? (
+                  <div className="card-premium" style={{ padding: "32px", textAlign: "center" }}>
+                    <p style={{ fontWeight: 700 }}>No products found</p>
+                    <p className="t-caption">Try another category or search term.</p>
+                  </div>
+                ) : (
                 <div className="products-grid stagger">
                   {filteredProducts.map((prod) => {
                     const itemQty = cart[prod.id] || 0;
                     return (
                       <div key={prod.id} className="product-card animate-fade-up">
-                        <div className="product-image-wrap">
+                        <div className="product-image-wrap" onClick={() => setSelectedProduct(prod)} style={{ cursor: "pointer" }}>
                           <img src={prod.imageUrl} alt={prod.name} loading="lazy" />
                           {prod.badge && (
                             <span className={`badge ${prod.badge === "organic" ? "badge-organic" : "badge-bestseller"}`} style={{ position: "absolute", top: "10px", left: "10px", zIndex: 2 }}>
@@ -819,6 +1049,7 @@ export default function Home() {
                     );
                   })}
                 </div>
+                )}
               </div>
 
               {/* ⭐ CUSTOMER REVIEWS SECTION ⭐ */}
@@ -923,31 +1154,31 @@ export default function Home() {
         )}
 
         {/* ─── REWARDS TAB ─── */}
-        {customerSubTab === "rewards" && userEmail && wallets[userEmail] && (
+        {customerSubTab === "rewards" && userEmail && (
           <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "32px 16px" }}>
             <div className="wallet-card" style={{ marginBottom: "24px" }}>
               <div style={{ position: "relative", zIndex: 2 }}>
                 <span style={{ fontSize: "13px", opacity: 0.7, fontWeight: 500 }}>Available Reward Balance</span>
-                <div style={{ fontSize: "clamp(36px, 5vw, 48px)", fontWeight: 900, lineHeight: 1.1, margin: "8px 0" }}>{wallets[userEmail].pointsBalance} <span style={{ fontSize: "20px", fontWeight: 600, opacity: 0.7 }}>pts</span></div>
-                <span style={{ fontSize: "14px", opacity: 0.7 }}>≈ ₹{wallets[userEmail].pointsBalance} instant discount value</span>
+                <div style={{ fontSize: "clamp(36px, 5vw, 48px)", fontWeight: 900, lineHeight: 1.1, margin: "8px 0" }}>{(wallets[userEmail]?.pointsBalance || 0)} <span style={{ fontSize: "20px", fontWeight: 600, opacity: 0.7 }}>pts</span></div>
+                <span style={{ fontSize: "14px", opacity: 0.7 }}>≈ ₹{wallets[userEmail]?.pointsBalance || 0} instant discount value</span>
               </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "16px", marginBottom: "24px" }}>
               <div className="card-premium" style={{ padding: "20px", textAlign: "center" }}>
                 <span className="t-caption">Lifetime Earned</span>
-                <div style={{ fontSize: "28px", fontWeight: 800, marginTop: "4px" }}>{wallets[userEmail].lifetimeEarned}</div>
+                <div style={{ fontSize: "28px", fontWeight: 800, marginTop: "4px" }}>{wallets[userEmail]?.lifetimeEarned || 0}</div>
               </div>
               <div className="card-premium" style={{ padding: "20px", textAlign: "center" }}>
                 <span className="t-caption">Lifetime Redeemed</span>
-                <div style={{ fontSize: "28px", fontWeight: 800, marginTop: "4px", color: "var(--danger)" }}>{wallets[userEmail].lifetimeRedeemed}</div>
+                <div style={{ fontSize: "28px", fontWeight: 800, marginTop: "4px", color: "var(--danger)" }}>{wallets[userEmail]?.lifetimeRedeemed || 0}</div>
               </div>
             </div>
 
             <div className="card-premium" style={{ padding: "24px" }}>
               <h3 style={{ fontSize: "18px", fontWeight: 800, marginBottom: "16px" }}>Points History</h3>
-              {wallets[userEmail].history.length === 0 ? (
-                <p className="t-caption">No transactions recorded yet.</p>
+              {!(wallets[userEmail]?.history?.length) ? (
+                <p className="t-caption">No transactions recorded yet. Place an order to start earning points.</p>
               ) : (
                 <div className="table-wrap">
                   <table>
@@ -1121,6 +1352,27 @@ export default function Home() {
                 )}
               </div>
 
+              {userEmail && (wallets[userEmail]?.pointsBalance || 0) > 0 && (
+                <div>
+                  <h4 style={{ fontSize: "14px", fontWeight: 800, marginBottom: "8px" }}>🎁 Redeem Reward Points</h4>
+                  <input
+                    className="input-premium"
+                    type="number"
+                    min={0}
+                    max={wallets[userEmail].pointsBalance}
+                    value={redeemedPointsInput}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      const max = Math.min(wallets[userEmail].pointsBalance, getCartTotal());
+                      setRedeemedPointsInput(Number.isFinite(value) ? Math.max(0, Math.min(value, max)) : 0);
+                    }}
+                  />
+                  <p className="t-caption" style={{ marginTop: "6px" }}>
+                    Available {wallets[userEmail].pointsBalance} pts. 1 point = ₹1.
+                  </p>
+                </div>
+              )}
+
               {/* Payment selector */}
               <div>
                 <h4 style={{ fontSize: "14px", fontWeight: 800, marginBottom: "10px" }}>Payment Method</h4>
@@ -1163,9 +1415,15 @@ export default function Home() {
         </div>
 
         {Object.keys(cart).length > 0 && (
-          <div style={{ padding: "20px 24px", borderTop: "1px solid var(--divider)" }}>
-            <button onClick={handlePlaceOrder} className="btn btn-primary" style={{ width: "100%", padding: "16px", fontSize: "16px", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-green)" }}>
-              {paymentMode === "cod" ? "Place Order (COD)" : "Pay & Place Order"}
+          <div style={{ padding: "20px 24px", borderTop: "1px solid var(--divider)", paddingBottom: "calc(20px + env(safe-area-inset-bottom))" }}>
+            {checkoutError && <p style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "10px" }}>{checkoutError}</p>}
+            <button
+              onClick={handlePlaceOrder}
+              disabled={placingOrder || isOutOfRange}
+              className="btn btn-primary"
+              style={{ width: "100%", padding: "16px", fontSize: "16px", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-green)", minHeight: "48px" }}
+            >
+              {placingOrder ? "Processing…" : paymentMode === "cod" ? "Place Order (COD)" : "Pay & Place Order"}
             </button>
           </div>
         )}
@@ -1178,14 +1436,24 @@ export default function Home() {
             <span style={{ fontSize: "3.2rem", display: "block", marginBottom: "16px" }}>🥬</span>
             <h3 style={{ fontWeight: 900, fontSize: "24px", color: "var(--text)" }}>Welcome to SABJIWALAA ५</h3>
             <p style={{ color: "var(--text-3)", margin: "8px 0 24px", fontSize: "14px", lineHeight: 1.5 }}>
-              Sign in with Google to access <strong>{loginRequiredFor}</strong>, earn reward cashback, and track fast deliveries.
+              Sign in to access <strong>{loginRequiredFor || "your account"}</strong>, earn rewards, and track deliveries.
             </p>
+            <form onSubmit={handleEmailAuth} style={{ display: "flex", flexDirection: "column", gap: "10px", textAlign: "left", marginBottom: "16px" }}>
+              <input className="input-premium" type="email" placeholder="Email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} autoComplete="email" />
+              <input className="input-premium" type="password" placeholder="Password (min 6 characters)" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} autoComplete={isRegistering ? "new-password" : "current-password"} />
+              {authError && <p style={{ color: "var(--danger)", fontSize: "13px" }}>{authError}</p>}
+              <button type="submit" className="btn btn-primary" disabled={authLoading} style={{ width: "100%", padding: "14px", borderRadius: "var(--r-xl)" }}>
+                {authLoading ? "Please wait…" : isRegistering ? "Create account" : "Sign in with email"}
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => setIsRegistering((v) => !v)} style={{ width: "100%" }}>
+                {isRegistering ? "Have an account? Sign in" : "New here? Create an account"}
+              </button>
+            </form>
             <button
               onClick={() => { setShowLoginModal(false); handleGoogleSignIn(); }}
-              className="btn btn-primary"
-              style={{ width: "100%", padding: "16px", fontSize: "15px", gap: "12px", borderRadius: "var(--r-xl)" }}
+              className="btn btn-secondary"
+              style={{ width: "100%", padding: "14px", fontSize: "15px", gap: "12px", borderRadius: "var(--r-xl)" }}
             >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/></svg>
               Continue with Google
             </button>
           </div>
@@ -1248,6 +1516,25 @@ export default function Home() {
           </button>
         ))}
       </nav>
+
+      {selectedProduct && (
+        <div className="modal-overlay" onClick={() => setSelectedProduct(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ textAlign: "left", maxWidth: 480, padding: 0, overflow: "hidden" }}>
+            <img src={selectedProduct.imageUrl} alt={selectedProduct.name} style={{ width: "100%", height: 220, objectFit: "cover" }} />
+            <div style={{ padding: 24 }}>
+              <h3 style={{ fontSize: 22, fontWeight: 800 }}>{selectedProduct.name}</h3>
+              <p className="t-caption" style={{ marginTop: 4 }}>{selectedProduct.hindiName} · {selectedProduct.unit}</p>
+              <p style={{ marginTop: 12, fontSize: 15, color: "var(--text-2)" }}>Farm-fresh item from our hyperlocal hub. Stock: {selectedProduct.stock}.</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 18 }}>
+                <strong style={{ fontSize: 22 }}>₹{selectedProduct.price}</strong>
+                <button className="btn btn-primary" disabled={isOutOfRange || (selectedProduct.stock || 0) <= 0} onClick={() => { addToCart(selectedProduct.id); setSelectedProduct(null); setCartOpen(true); }}>
+                  {(selectedProduct.stock || 0) <= 0 ? "Out of stock" : "Add to cart"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

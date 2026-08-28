@@ -133,7 +133,7 @@ export function validateOrder(order: {
     errors.push("Valid delivery address is required");
   }
 
-  const validPaymentMethods = ["Cash on Delivery", "UPI", "Card Payment"];
+  const validPaymentMethods = ["Cash on Delivery", "UPI", "UPI Payment", "Card Payment"];
   if (!validPaymentMethods.includes(order.paymentMethod)) {
     errors.push("Invalid payment method");
   }

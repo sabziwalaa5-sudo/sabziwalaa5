@@ -1,8 +1,8 @@
 /**
  * SABJIWALAA ५ — Automated Verification Suite
- * Tests all core business logic, input validation, rate limiting, and security engines.
- * Execute using: npx tsx src/tests/test_flows.ts
  */
+
+process.env.PAYMENT_HMAC_SECRET = process.env.PAYMENT_HMAC_SECRET || "unit-test-hmac-secret";
 
 import {
   validateEmail,
@@ -15,6 +15,15 @@ import {
 } from "../lib/validation";
 
 import { checkRateLimit, resetRateLimit } from "../lib/rateLimiter";
+import {
+  buildCartItems,
+  clampQuantity,
+  computeBill,
+  nextCartQuantity,
+  orderFingerprint,
+  registerOrderFingerprint,
+} from "../lib/orderEngine";
+import { createPaymentClaims, readClaims, signClaims } from "../lib/payments";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -121,6 +130,48 @@ const invalidPaymentOrder = {
   paymentMethod: "Bitcoin"
 };
 assert(validateOrder(invalidPaymentOrder).valid === false, "Order with invalid payment method fails");
+
+const upiOrder = { ...validOrder, paymentMethod: "UPI" };
+assert(validateOrder(upiOrder).valid === true, "UPI payment method is accepted");
+
+const hugeQtyOrder = {
+  ...validOrder,
+  items: [{ productId: "p1", name: "Premium Organic Potatoes", qty: 500, price: 40 }],
+};
+assert(validateOrder(hugeQtyOrder).valid === false, "Quantity above 99 fails");
+
+const zeroQtyOrder = {
+  ...validOrder,
+  items: [{ productId: "p1", name: "Premium Organic Potatoes", qty: 0, price: 40 }],
+};
+assert(validateOrder(zeroQtyOrder).valid === false, "Zero quantity fails");
+
+console.log("\n--- Testing Cart Engine ---");
+assert(clampQuantity(-3, 10) === 0, "Negative quantity clamps to 0");
+assert(clampQuantity(500, 12) === 12, "Huge quantity clamps to stock");
+assert(nextCartQuantity(1, 1, 2) === 2, "Increment respects stock");
+assert(nextCartQuantity(2, 1, 2) === 2, "Increment does not exceed stock");
+
+const built = buildCartItems({ p1: 2, missing: 4 }, [{ id: "p1", name: "Potatoes", price: 40, stock: 10 }]);
+assert(built.length === 1 && built[0].subtotal === 80, "Cart builder ignores invalid product IDs");
+
+const bill = computeBill({ subtotal: 250, couponDiscount: 20, redeemedPoints: 10, deliveryCharge: 30, freeDeliveryThreshold: 200 });
+assert(bill.deliveryCharges === 0 && bill.totalAmount === 220, "Free delivery and discounts compute correctly");
+
+const fp = orderFingerprint({ email: "a@b.com", items: [{ productId: "p1", qty: 1 }], totalAmount: 40 });
+assert(registerOrderFingerprint(fp) === true, "First order fingerprint allowed");
+assert(registerOrderFingerprint(fp) === false, "Duplicate order fingerprint blocked");
+
+console.log("\n--- Testing Payment Token Security ---");
+const claims = createPaymentClaims({ orderDraftId: "SBJ123", amountRupees: 170, method: "COD" });
+const token = signClaims(claims);
+assert(readClaims(token)?.paymentId === claims.paymentId, "Signed checkout token round-trips");
+const [body, signature] = token.split(".");
+const flipped = signature.endsWith("a") ? `${signature.slice(0, -1)}b` : `${signature.slice(0, -1)}a`;
+assert(readClaims(`${body}.${flipped}`) === null, "Tampered checkout token is rejected");
+assert(readClaims("not-a-token") === null, "Garbage checkout token is rejected");
+const upiClaims = createPaymentClaims({ orderDraftId: "SBJ124", amountRupees: 200, method: "UPI" });
+assert(signClaims(upiClaims).includes("."), "UPI checkout token is HMAC-signed");
 
 console.log(`\n─────────────────────────────────────────────────────────`);
 console.log(`📊 Verification Complete: ${passedTests}/${totalTests} checks passed.`);

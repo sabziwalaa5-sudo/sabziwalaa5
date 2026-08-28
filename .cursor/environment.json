@@ -1,0 +1,16 @@
+{
+  "name": "Sabjiwala 5",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "backend",
+      "command": "cd backend && npm run dev"
+    },
+    {
+      "name": "web",
+      "command": "cd web && npm run dev -- -p 3001 -H 0.0.0.0"
+    }
+  ],
+  "ports": [3001, 4000]
+}

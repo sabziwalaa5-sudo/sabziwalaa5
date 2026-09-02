@@ -26,7 +26,8 @@ import {
 import { createPaymentClaims, readClaims, signClaims } from "../lib/payments";
 import { canAccessPortal, normalizeRole, portalPathForRole, roleFromEmail } from "../lib/roles";
 import { INITIAL_SETTINGS, pointsEarnedForOrder, rupeesFromPoints } from "../lib/platformSettings";
-import { getAdminWebHref } from "../lib/config";
+import { getAdminWebHref, MOBILE_APP_PATH } from "../lib/config";
+import { MOBILE_ROLES, isMobileRoleId, roleById } from "../lib/mobileApp";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -198,6 +199,14 @@ assert(pointsEarnedForOrder(250, INITIAL_SETTINGS) === 12, "Admin earning rate o
 assert(pointsEarnedForOrder(250, { ...INITIAL_SETTINGS, rewardSettings: { ...INITIAL_SETTINGS.rewardSettings, enabled: false } }) === 0, "Disabled rewards earn no points");
 assert(rupeesFromPoints(10, INITIAL_SETTINGS) === 10, "Default point value is ₹1 per point");
 assert(rupeesFromPoints(10, { ...INITIAL_SETTINGS, rewardSettings: { ...INITIAL_SETTINGS.rewardSettings, pointValue: 0.5 } }) === 5, "Admin point value converts points to rupees");
+
+console.log("\n--- Testing Mobile App Launcher ---");
+assert(MOBILE_APP_PATH === "/app", "Mobile app home is /app");
+assert(MOBILE_ROLES.length === 4, "Launcher exposes customer, admin, vendor, and rider");
+assert(MOBILE_ROLES.map((r) => r.id).join(",") === "customer,admin,vendor,rider", "Role order is customer → admin → vendor → rider");
+assert(roleById("admin")?.href === "/admin", "Admin role opens the admin web portal from the app");
+assert(isMobileRoleId("rider") === true, "Rider is a valid mobile role");
+assert(isMobileRoleId("hacker") === false, "Unknown roles are rejected");
 
 console.log(`\n─────────────────────────────────────────────────────────`);
 console.log(`📊 Verification Complete: ${passedTests}/${totalTests} checks passed.`);

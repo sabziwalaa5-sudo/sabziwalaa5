@@ -16,7 +16,7 @@
       ]
     },
     {
-      "source": "/(vendor|rider|admin|login)(.*)",
+      "source": "/(app|vendor|rider|admin|login)(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]

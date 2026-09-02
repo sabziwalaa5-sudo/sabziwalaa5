@@ -30,3 +30,13 @@ upsert_env_file "$ROOT/backend/.env" \
   "DATABASE_URL=postgresql://sabjiwala_user:sabjiwala_password@localhost:5432/sabjiwala5_db?schema=public" \
   "PAYMENT_HMAC_SECRET=dev-hmac-secret-change-me" \
   "WEB_ORIGIN=http://localhost:3001"
+
+if [[ -n "${RAZORPAY_KEY_ID:-}" && -n "${RAZORPAY_KEY_SECRET:-}" ]]; then
+  upsert_env_file "$ROOT/web/.env.local" \
+    "RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}" \
+    "RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}"
+
+  upsert_env_file "$ROOT/backend/.env" \
+    "RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}" \
+    "RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}"
+fi

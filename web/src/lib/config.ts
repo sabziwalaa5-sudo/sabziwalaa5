@@ -28,3 +28,10 @@ export function getAdminWebUrl(): string {
   if (explicit) return explicit.replace(/\/$/, "");
   return `${getApiBaseUrl()}${ADMIN_WEB_PATH}`;
 }
+
+/** Same-origin /admin unless NEXT_PUBLIC_ADMIN_URL points at a dedicated admin host. */
+export function getAdminWebHref(): string {
+  const explicit = process.env.NEXT_PUBLIC_ADMIN_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, "");
+  return ADMIN_WEB_PATH;
+}

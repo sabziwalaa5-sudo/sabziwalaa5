@@ -7,6 +7,7 @@ import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Sto
 import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PRODUCTS, INITIAL_ORDERS } from "../../lib/sharedState";
 import { resolveUserRole } from "../../lib/resolveRole";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
+import AppLoadingShell from "../../components/AppLoadingShell";
 
 export default function VendorPortal() {
   const [mounted, setMounted] = useState(false);
@@ -230,7 +231,7 @@ export default function VendorPortal() {
   };
 
   if (!mounted) {
-    return <div style={{ minHeight: "100vh", background: "#ffffff" }} />;
+    return <AppLoadingShell label="Opening merchant hub…" />;
   }
 
   const currentVendor = getCurrentVendorRecord();

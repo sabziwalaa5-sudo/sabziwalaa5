@@ -1,7 +1,12 @@
 "use client";
 
 import { Shield } from "lucide-react";
-import { AppRole, STAFF_PORTALS, canAccessPortal, portalPathForRole } from "../lib/roles";
+import { getAdminWebHref } from "../lib/config";
+import { AppRole, STAFF_PORTALS, canAccessPortal, portalPathForRole, type StaffPortal } from "../lib/roles";
+
+function hrefForPortal(id: StaffPortal): string {
+  return id === "admin" ? getAdminWebHref() : `/${id}`;
+}
 
 export default function PortalNav({
   role,
@@ -21,7 +26,7 @@ export default function PortalNav({
     );
   }
 
-  const homeHref = current === "storefront" ? portalPathForRole(role) : "/";
+  const homeHref = current === "storefront" ? (role === "ADMIN" ? getAdminWebHref() : portalPathForRole(role)) : "/";
   const homeLabel = current === "storefront" ? `Open ${role === "ADMIN" ? "Admin" : role === "VENDOR" ? "Vendor" : "Rider"} dashboard` : "Customer storefront";
 
   return (
@@ -55,7 +60,7 @@ export default function PortalNav({
       {STAFF_PORTALS.filter((portal) => canAccessPortal(role, portal.id) && portal.id !== current).map((portal) => (
         <a
           key={portal.id}
-          href={portal.href}
+          href={hrefForPortal(portal.id)}
           style={{ color: "var(--text-2, #374151)", textDecoration: "none" }}
         >
           {portal.label}
@@ -65,14 +70,22 @@ export default function PortalNav({
   );
 }
 
-export function StaffLoginLinks() {
+export function StaffLoginLinks({ compact = false }: { compact?: boolean }) {
   return (
-    <p style={{ marginBlockStart: "1.25rem", textAlign: "center", fontSize: "0.8rem", color: "var(--text-secondary, var(--text-3))" }}>
+    <p
+      data-testid="staff-portal-links"
+      style={{
+        marginBlockStart: compact ? 0 : "1.25rem",
+        textAlign: "center",
+        fontSize: "0.8rem",
+        color: "var(--text-secondary, var(--text-3))",
+      }}
+    >
       Staff portals:{" "}
       {STAFF_PORTALS.map((portal, index) => (
         <span key={portal.id}>
           {index > 0 ? " · " : null}
-          <a href={portal.href} style={{ color: "var(--accent)", fontWeight: 700, textDecoration: "none" }}>
+          <a href={hrefForPortal(portal.id)} style={{ color: "var(--accent)", fontWeight: 700, textDecoration: "none" }}>
             {portal.label}
           </a>
         </span>

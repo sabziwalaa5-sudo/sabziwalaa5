@@ -26,6 +26,7 @@ import {
 import { createPaymentClaims, readClaims, signClaims } from "../lib/payments";
 import { canAccessPortal, normalizeRole, portalPathForRole, roleFromEmail } from "../lib/roles";
 import { INITIAL_SETTINGS, pointsEarnedForOrder, rupeesFromPoints } from "../lib/platformSettings";
+import { getAdminWebHref } from "../lib/config";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -181,6 +182,7 @@ assert(roleFromEmail("raman@gmail.com") === "VENDOR", "Merchant email maps to VE
 assert(roleFromEmail("rider@gmail.com") === "DELIVERY_PARTNER", "Rider email maps to DELIVERY_PARTNER");
 assert(roleFromEmail("shopper@gmail.com") === null, "Unknown email does not force a staff role");
 assert(portalPathForRole("ADMIN") === "/admin", "Admin role opens the admin web portal");
+assert(getAdminWebHref() === "/admin" || getAdminWebHref().endsWith("/admin"), "Admin web href resolves to the admin portal");
 assert(portalPathForRole("VENDOR") === "/vendor", "Vendor role opens the vendor portal");
 assert(portalPathForRole("DELIVERY_PARTNER") === "/rider", "Rider role opens the rider portal");
 assert(canAccessPortal("ADMIN", "admin") === true, "Admin can open the admin portal");

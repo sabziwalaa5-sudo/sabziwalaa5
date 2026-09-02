@@ -7,6 +7,7 @@ import { Eye, Shield, Clock, MapPin, Truck, Check, X, ArrowLeft, DollarSign, Lis
 import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_ORDERS } from "../../lib/sharedState";
 import { resolveUserRole } from "../../lib/resolveRole";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
+import AppLoadingShell from "../../components/AppLoadingShell";
 
 export default function RiderPortal() {
   const [mounted, setMounted] = useState(false);
@@ -180,7 +181,7 @@ export default function RiderPortal() {
   };
 
   if (!mounted) {
-    return <div style={{ minHeight: "100vh", background: "#ffffff" }} />;
+    return <AppLoadingShell label="Opening rider terminal…" />;
   }
 
   return (

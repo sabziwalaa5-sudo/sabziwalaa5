@@ -39,8 +39,10 @@ import {
 } from "lucide-react";
 import ProfileDashboard from "../components/ProfileDashboard";
 import PortalNav, { StaffLoginLinks } from "../components/PortalNav";
-import { type AppRole } from "../lib/roles";
+import AppLoadingShell from "../components/AppLoadingShell";
+import { type AppRole, portalPathForRole } from "../lib/roles";
 import { resolveUserRole } from "../lib/resolveRole";
+import { getAdminWebHref } from "../lib/config";
 import { getPlatformSettings, pointsEarnedForOrder, rupeesFromPoints, type PlatformSettings } from "../lib/platformSettings";
 import {
   STATE_KEYS,
@@ -231,7 +233,7 @@ export default function Home() {
         setUserRole(role);
         setShowLoginModal(false);
         if (role !== "CUSTOMER") {
-          window.location.assign(role === "ADMIN" ? "/admin" : role === "VENDOR" ? "/vendor" : "/rider");
+          window.location.assign(role === "ADMIN" ? getAdminWebHref() : portalPathForRole(role));
         }
       } else if (isRegistering) {
         setAuthError("Check your email to confirm the account, then sign in.");
@@ -689,7 +691,7 @@ export default function Home() {
 
   const totalCartItemsCount = Object.values(cart).reduce((a, b) => a + b, 0);
 
-  if (!mounted) return null;
+  if (!mounted) return <AppLoadingShell label="Loading marketplace…" />;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "var(--bg)" }}>
@@ -1534,6 +1536,11 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* ═══════ STAFF PORTAL LINKS ═══════ */}
+      <footer style={{ padding: "16px 16px calc(88px + env(safe-area-inset-bottom))", textAlign: "center" }}>
+        <StaffLoginLinks compact />
+      </footer>
 
       {/* ═══════ STICKY BOTTOM NAV ═══════ */}
       <nav className="bottom-nav">

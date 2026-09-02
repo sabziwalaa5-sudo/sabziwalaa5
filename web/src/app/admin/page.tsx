@@ -8,6 +8,7 @@ import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PR
 import { resolveUserRole } from "../../lib/resolveRole";
 import { getPlatformSettings, setPlatformSettings, INITIAL_SETTINGS } from "../../lib/platformSettings";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
+import AppLoadingShell from "../../components/AppLoadingShell";
 
 export default function AdminPortal() {
   const [mounted, setMounted] = useState(false);
@@ -367,7 +368,7 @@ export default function AdminPortal() {
   };
 
   if (!mounted) {
-    return <div style={{ minHeight: "100vh", background: "#ffffff" }} />;
+    return <AppLoadingShell label="Opening administrator terminal…" />;
   }
 
   // Analytics summary calculations
@@ -383,7 +384,7 @@ export default function AdminPortal() {
             <div style={{ textAlign: "center", marginBlockEnd: "2rem" }}>
               <span style={{ fontSize: "3rem" }}>🛡️</span>
               <h2 style={{ fontWeight: "900", fontSize: "1.6rem", marginBlockStart: "0.5rem" }}>SABJIWALAA ५</h2>
-              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Administrator Terminal Gate</p>
+              <p data-testid="admin-gate" style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Administrator Terminal Gate</p>
             </div>
 
             {authError && (

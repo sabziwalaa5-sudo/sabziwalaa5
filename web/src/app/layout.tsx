@@ -44,6 +44,8 @@ export default function RootLayout({
           defer
         ></script>
         <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" href="/favicon.png" />
+        <link rel="apple-touch-icon" href="/images/logo.png" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>

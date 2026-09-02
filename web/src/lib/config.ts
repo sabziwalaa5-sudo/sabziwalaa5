@@ -7,9 +7,11 @@ export const APP_BUILD = "1";
 export const PRODUCTION_WEB_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://web-sabziwalaa5.vercel.app";
 
+export const ADMIN_WEB_PATH = "/admin";
+
 export function getApiBaseUrl(): string {
   if (typeof window === "undefined") {
-    return (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+    return (process.env.NEXT_PUBLIC_APP_URL || PRODUCTION_WEB_URL).replace(/\/$/, "");
   }
 
   const w = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
@@ -19,4 +21,10 @@ export function getApiBaseUrl(): string {
   }
 
   return window.location.origin.replace(/\/$/, "");
+}
+
+export function getAdminWebUrl(): string {
+  const explicit = process.env.NEXT_PUBLIC_ADMIN_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, "");
+  return `${getApiBaseUrl()}${ADMIN_WEB_PATH}`;
 }

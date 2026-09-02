@@ -5,6 +5,9 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Settings, Gift, FileText, ShoppingBag, Store, Users, Tag, AlertTriangle, Truck } from "lucide-react";
 import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_WALLETS, INITIAL_COUPONS, INITIAL_CAMPAIGNS } from "../../lib/sharedState";
+import { resolveUserRole } from "../../lib/resolveRole";
+import { getPlatformSettings, setPlatformSettings, INITIAL_SETTINGS } from "../../lib/platformSettings";
+import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 
 export default function AdminPortal() {
   const [mounted, setMounted] = useState(false);
@@ -66,17 +69,11 @@ export default function AdminPortal() {
     maxDiscount: 50
   });
 
-  // Rewards settings
-  const [rewardSettings, setRewardSettings] = useState({
-    enabled: true,
-    earningRate: 5,
-    pointValue: 1.0
-  });
-
-  // Global settings
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
-  const [minOrderThreshold, setMinOrderThreshold] = useState(100);
-  const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(200);
+  const [rewardSettings, setRewardSettings] = useState(INITIAL_SETTINGS.rewardSettings);
+  const [maintenanceMode, setMaintenanceMode] = useState(INITIAL_SETTINGS.maintenanceMode);
+  const [minOrderThreshold, setMinOrderThreshold] = useState(INITIAL_SETTINGS.minOrderThreshold);
+  const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(INITIAL_SETTINGS.freeDeliveryThreshold);
+  const [settingsSavedAt, setSettingsSavedAt] = useState<string | null>(null);
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
 
@@ -89,10 +86,16 @@ export default function AdminPortal() {
       setWallets(getStoredState(STATE_KEYS.WALLETS, INITIAL_WALLETS));
       setAvailableCoupons(getStoredState(STATE_KEYS.COUPONS, INITIAL_COUPONS));
       setBonusCampaigns(getStoredState(STATE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS));
+      const settings = getPlatformSettings();
+      setRewardSettings(settings.rewardSettings);
+      setMaintenanceMode(settings.maintenanceMode);
+      setMinOrderThreshold(settings.minOrderThreshold);
+      setFreeDeliveryThreshold(settings.freeDeliveryThreshold);
     };
 
     window.addEventListener("sabjiwala_state_update", syncState);
     window.addEventListener("storage", syncState);
+    syncState();
 
     // Check session
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -117,38 +120,25 @@ export default function AdminPortal() {
     };
   }, []);
 
+  const persistPlatformSettings = (next: Partial<{
+    maintenanceMode: boolean;
+    minOrderThreshold: number;
+    freeDeliveryThreshold: number;
+    rewardSettings: typeof rewardSettings;
+  }>) => {
+    const merged = {
+      maintenanceMode: next.maintenanceMode ?? maintenanceMode,
+      minOrderThreshold: next.minOrderThreshold ?? minOrderThreshold,
+      freeDeliveryThreshold: next.freeDeliveryThreshold ?? freeDeliveryThreshold,
+      rewardSettings: next.rewardSettings ?? rewardSettings,
+    };
+    setPlatformSettings(merged);
+    setSettingsSavedAt(new Date().toLocaleTimeString("en-IN"));
+  };
+
   const verifySessionRole = async (user: any) => {
     const email = user.email || "";
-    let role = "CUSTOMER";
-
-    if (email.toLowerCase() === "sabziwalaa5@gmail.com") {
-      role = "ADMIN";
-    } else {
-      try {
-        // Try querying 'profiles' first (MVP schema)
-        const { data: profileMvp } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (profileMvp?.role) {
-          role = profileMvp.role.toUpperCase();
-        } else {
-          // Fallback to 'users' table (production schema)
-          const { data: profileProd } = await supabase
-            .from("users")
-            .select("role")
-            .eq("uid", user.id)
-            .maybeSingle();
-          if (profileProd?.role) {
-            role = profileProd.role.toUpperCase();
-          }
-        }
-      } catch (e) {
-        console.error("Error checking role", e);
-      }
-    }
+    const role = await resolveUserRole(user);
 
     if (role === "ADMIN") {
       setUserEmail(email);
@@ -463,6 +453,7 @@ export default function AdminPortal() {
               <a href="/" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: "600", textDecoration: "none" }}>
                 <ArrowLeft size={16} /> Back to Grocery Marketplace
               </a>
+              <StaffLoginLinks />
             </div>
           </div>
         </div>
@@ -479,7 +470,8 @@ export default function AdminPortal() {
               </div>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+              <PortalNav role={userRole === "ADMIN" ? "ADMIN" : null} current="admin" compact />
               <span className="badge badge-success" style={{ fontSize: "0.7rem", backgroundColor: "#7c3aed", color: "white" }}>Platform Owner</span>
               <button onClick={handleSignOut} className="btn btn-secondary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem", borderRadius: "8px" }}>Sign Out</button>
             </div>
@@ -812,7 +804,11 @@ export default function AdminPortal() {
                     <input
                       type="checkbox"
                       checked={rewardSettings.enabled}
-                      onChange={(e) => setRewardSettings(prev => ({ ...prev, enabled: e.target.checked }))}
+                      onChange={(e) => {
+                        const next = { ...rewardSettings, enabled: e.target.checked };
+                        setRewardSettings(next);
+                        persistPlatformSettings({ rewardSettings: next });
+                      }}
                     />
                     <label style={{ fontWeight: "700" }}>Enable Earning & Redemption of Points on Platform</label>
                   </div>
@@ -823,7 +819,11 @@ export default function AdminPortal() {
                       <input
                         type="number"
                         value={rewardSettings.earningRate}
-                        onChange={(e) => setRewardSettings(prev => ({ ...prev, earningRate: parseInt(e.target.value) || 0 }))}
+                        onChange={(e) => {
+                          const next = { ...rewardSettings, earningRate: parseInt(e.target.value) || 0 };
+                          setRewardSettings(next);
+                          persistPlatformSettings({ rewardSettings: next });
+                        }}
                         style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }}
                       />
                     </div>
@@ -833,7 +833,11 @@ export default function AdminPortal() {
                         type="number"
                         step="0.1"
                         value={rewardSettings.pointValue}
-                        onChange={(e) => setRewardSettings(prev => ({ ...prev, pointValue: parseFloat(e.target.value) || 0 }))}
+                        onChange={(e) => {
+                          const next = { ...rewardSettings, pointValue: parseFloat(e.target.value) || 0 };
+                          setRewardSettings(next);
+                          persistPlatformSettings({ rewardSettings: next });
+                        }}
                         style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }}
                       />
                     </div>
@@ -905,7 +909,10 @@ export default function AdminPortal() {
                       type="checkbox"
                       id="maintenance-toggle"
                       checked={maintenanceMode}
-                      onChange={(e) => setMaintenanceMode(e.target.checked)}
+                      onChange={(e) => {
+                        setMaintenanceMode(e.target.checked);
+                        persistPlatformSettings({ maintenanceMode: e.target.checked });
+                      }}
                     />
                     <label htmlFor="maintenance-toggle" style={{ fontWeight: "700", display: "flex", alignItems: "center", gap: "0.35rem" }}>
                       <AlertTriangle size={16} style={{ color: "var(--danger)" }} />
@@ -919,7 +926,11 @@ export default function AdminPortal() {
                       <input
                         type="number"
                         value={minOrderThreshold}
-                        onChange={(e) => setMinOrderThreshold(parseInt(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 0;
+                          setMinOrderThreshold(value);
+                          persistPlatformSettings({ minOrderThreshold: value });
+                        }}
                         style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }}
                       />
                     </div>
@@ -928,11 +939,19 @@ export default function AdminPortal() {
                       <input
                         type="number"
                         value={freeDeliveryThreshold}
-                        onChange={(e) => setFreeDeliveryThreshold(parseInt(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 0;
+                          setFreeDeliveryThreshold(value);
+                          persistPlatformSettings({ freeDeliveryThreshold: value });
+                        }}
                         style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }}
                       />
                     </div>
                   </div>
+                  <p className="t-caption" style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                    These settings apply immediately to the customer storefront and native apps at the same origin.
+                    {settingsSavedAt ? ` Last synced ${settingsSavedAt}.` : ""}
+                  </p>
                 </div>
               </div>
             )}

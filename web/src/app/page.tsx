@@ -38,6 +38,10 @@ import {
   SlidersHorizontal
 } from "lucide-react";
 import ProfileDashboard from "../components/ProfileDashboard";
+import PortalNav, { StaffLoginLinks } from "../components/PortalNav";
+import { type AppRole } from "../lib/roles";
+import { resolveUserRole } from "../lib/resolveRole";
+import { getPlatformSettings, pointsEarnedForOrder, rupeesFromPoints, type PlatformSettings } from "../lib/platformSettings";
 import {
   STATE_KEYS,
   getStoredState,
@@ -69,7 +73,7 @@ export default function Home() {
 
   // Auth State
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -83,7 +87,8 @@ export default function Home() {
 
   // Delivery Zone Engine States
   const [deliveryCharge, setDeliveryCharge] = useState<number>(30);
-  const [minOrderValue, setMinOrderValue] = useState<number>(100);
+  const [platformSettings, setPlatformSettingsState] = useState<PlatformSettings>(() => getPlatformSettings());
+  const [minOrderValue, setMinOrderValue] = useState<number>(getPlatformSettings().minOrderThreshold);
   const [estimatedDeliveryTime, setEstimatedDeliveryTime] = useState<number>(30);
   const [expressAvailable, setExpressAvailable] = useState<boolean>(true);
 
@@ -132,21 +137,23 @@ export default function Home() {
   // Check auth session
   useEffect(() => {
     setMounted(true);
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUserEmail(session.user.email || null);
-        setUserRole("customer");
+    const applySession = async (sessionUser: { id?: string; email?: string | null } | null) => {
+      if (!sessionUser) {
+        setUserEmail(null);
+        setUserRole(null);
+        return;
       }
+      const role = await resolveUserRole(sessionUser);
+      setUserEmail(sessionUser.email || null);
+      setUserRole(role);
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      applySession(session?.user || null);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUserEmail(session.user.email || null);
-        setUserRole("customer");
-      } else {
-        setUserEmail(null);
-        setUserRole(null);
-      }
+      applySession(session?.user || null);
     });
 
     return () => subscription.unsubscribe();
@@ -161,10 +168,18 @@ export default function Home() {
       setWallets(getStoredState(STATE_KEYS.WALLETS, INITIAL_WALLETS));
       setAvailableCoupons(getStoredState(STATE_KEYS.COUPONS, INITIAL_COUPONS));
       setBonusCampaigns(getStoredState(STATE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS));
+      const settings = getPlatformSettings();
+      setPlatformSettingsState(settings);
+      setMinOrderValue(settings.minOrderThreshold);
     };
 
     window.addEventListener("sabjiwala_state_update", handleSync);
-    return () => window.removeEventListener("sabjiwala_state_update", handleSync);
+    window.addEventListener("storage", handleSync);
+    handleSync();
+    return () => {
+      window.removeEventListener("sabjiwala_state_update", handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
   }, []);
 
   // Google Sign-In helper
@@ -211,9 +226,13 @@ export default function Home() {
       const { data, error } = await action;
       if (error) throw error;
       if (data.user?.email) {
+        const role = await resolveUserRole(data.user);
         setUserEmail(data.user.email);
-        setUserRole("customer");
+        setUserRole(role);
         setShowLoginModal(false);
+        if (role !== "CUSTOMER") {
+          window.location.assign(role === "ADMIN" ? "/admin" : role === "VENDOR" ? "/vendor" : "/rider");
+        }
       } else if (isRegistering) {
         setAuthError("Check your email to confirm the account, then sign in.");
       }
@@ -401,6 +420,11 @@ export default function Home() {
       return;
     }
 
+    if (platformSettings.maintenanceMode) {
+      setCheckoutError("The storefront is in maintenance mode. Checkout is temporarily closed by the administrator.");
+      return;
+    }
+
     if (isOutOfRange) {
       setCheckoutError("Delivery is unavailable for the selected location.");
       return;
@@ -418,7 +442,7 @@ export default function Home() {
     }
 
     const wallet = wallets[userEmail] || { pointsBalance: 0, lifetimeEarned: 0, lifetimeRedeemed: 0, history: [] };
-    const safeRedeem = Math.max(0, Math.min(redeemedPointsInput || 0, wallet.pointsBalance, getCartTotal()));
+    const safeRedeem = Math.max(0, Math.min(rupeesFromPoints(redeemedPointsInput || 0, platformSettings), wallet.pointsBalance, getCartTotal()));
     const subtotal = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
     const couponDiscount = getCouponDiscount();
     const bill = computeBill({
@@ -426,7 +450,7 @@ export default function Home() {
       couponDiscount,
       redeemedPoints: safeRedeem,
       deliveryCharge,
-      freeDeliveryThreshold: 200,
+      freeDeliveryThreshold: platformSettings.freeDeliveryThreshold,
     });
 
     if (subtotal < minOrderValue) {
@@ -594,7 +618,7 @@ export default function Home() {
       lastOrderFingerprint.current = fingerprint;
       lastOrderAt.current = Date.now();
 
-      const pointsEarned = Math.floor(bill.totalAmount / 10);
+      const pointsEarned = pointsEarnedForOrder(bill.totalAmount, platformSettings);
       const newBalance = wallet.pointsBalance - safeRedeem + pointsEarned;
       const updatedWallet = {
         ...wallet,
@@ -648,7 +672,9 @@ export default function Home() {
   };
 
   // Filter products by selected category and search query
-  const filteredProducts = productsList.filter((prod) => {
+  const activeVendorIds = new Set(vendorsList.filter((v) => v.status === "Active").map((v) => v.vendor_id));
+  const liveCatalog = productsList.filter((prod) => !prod.vendorId || activeVendorIds.has(prod.vendorId));
+  const filteredProducts = liveCatalog.filter((prod) => {
     const matchesCat = selectedCategory === "All" || prod.category === selectedCategory;
     const matchesSearch =
       prod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -657,9 +683,9 @@ export default function Home() {
     return matchesCat && matchesSearch;
   });
 
-  const bestSellerProducts = productsList.filter((p) => p.badge === "bestseller" || p.rating >= 4.8);
-  const seasonalProducts = productsList.filter((p) => p.isSeasonal);
-  const farmFreshProducts = productsList.filter((p) => p.isFarmFresh);
+  const bestSellerProducts = liveCatalog.filter((p) => p.badge === "bestseller" || p.rating >= 4.8);
+  const seasonalProducts = liveCatalog.filter((p) => p.isSeasonal);
+  const farmFreshProducts = liveCatalog.filter((p) => p.isFarmFresh);
 
   const totalCartItemsCount = Object.values(cart).reduce((a, b) => a + b, 0);
 
@@ -739,6 +765,7 @@ export default function Home() {
             ) : (
             <button onClick={() => { setLoginRequiredFor("account"); setShowLoginModal(true); }} className="btn btn-green-outline" style={{ padding: "8px 16px", fontSize: "13px" }}>Sign In</button>
             )}
+            <PortalNav role={userRole} current="storefront" compact />
           </div>
         </div>
       </header>
@@ -764,6 +791,7 @@ export default function Home() {
           ) : (
             <button onClick={() => { setLoginRequiredFor("account"); setShowLoginModal(true); }} className="btn btn-primary" style={{ padding: "6px 14px", fontSize: "12px", height: "34px", borderRadius: "var(--r-md)" }}>Sign In</button>
           )}
+          {userRole && userRole !== "CUSTOMER" && <PortalNav role={userRole} current="storefront" compact />}
         </div>
       </header>
 
@@ -846,6 +874,16 @@ export default function Home() {
                   <div>
                     <strong style={{ color: "var(--danger)", fontSize: "14px" }}>Out of Delivery Radius</strong>
                     <p style={{ fontSize: "13px", color: "var(--text-2)", margin: "2px 0 0" }}>We deliver within 5 KM of our vendor hubs. Please select a closer location.</p>
+                  </div>
+                </div>
+              )}
+
+              {platformSettings.maintenanceMode && (
+                <div style={{ background: "#FFF7ED", border: "1px solid rgba(234,88,12,0.25)", borderRadius: "var(--r-xl)", padding: "16px 20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                  <AlertTriangle size={22} color="#C2410C" />
+                  <div>
+                    <strong style={{ color: "#C2410C", fontSize: "14px" }}>Storefront maintenance</strong>
+                    <p style={{ fontSize: "13px", color: "var(--text-2)", margin: "2px 0 0" }}>The administrator has paused checkout. You can still browse the catalog.</p>
                   </div>
                 </div>
               )}
@@ -1401,12 +1439,12 @@ export default function Home() {
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Delivery Charge</span>
-                    <span>{getCartTotal() - getCouponDiscount() > 200 || getCartTotal() === 0 ? <strong style={{ color: "var(--accent)" }}>FREE</strong> : `₹${deliveryCharge}`}</span>
+                    <span>{getCartTotal() - getCouponDiscount() > platformSettings.freeDeliveryThreshold || getCartTotal() === 0 ? <strong style={{ color: "var(--accent)" }}>FREE</strong> : `₹${deliveryCharge}`}</span>
                   </div>
                   <div className="divider" style={{ margin: "4px 0" }} />
                   <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: "18px", color: "var(--accent)" }}>
                     <span>Grand Total</span>
-                    <span>₹{Math.max(0, getCartTotal() - getCouponDiscount()) + (getCartTotal() - getCouponDiscount() > 200 || getCartTotal() === 0 ? 0 : deliveryCharge)}</span>
+                    <span>₹{Math.max(0, getCartTotal() - getCouponDiscount()) + (getCartTotal() - getCouponDiscount() > platformSettings.freeDeliveryThreshold || getCartTotal() === 0 ? 0 : deliveryCharge)}</span>
                   </div>
                 </div>
               </div>
@@ -1419,7 +1457,7 @@ export default function Home() {
             {checkoutError && <p style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "10px" }}>{checkoutError}</p>}
             <button
               onClick={handlePlaceOrder}
-              disabled={placingOrder || isOutOfRange}
+              disabled={placingOrder || isOutOfRange || platformSettings.maintenanceMode}
               className="btn btn-primary"
               style={{ width: "100%", padding: "16px", fontSize: "16px", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-green)", minHeight: "48px" }}
             >
@@ -1456,6 +1494,7 @@ export default function Home() {
             >
               Continue with Google
             </button>
+            <StaffLoginLinks />
           </div>
         </div>
       )}

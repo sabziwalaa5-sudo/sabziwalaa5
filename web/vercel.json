@@ -1,4 +1,8 @@
 {
+  "redirects": [
+    { "source": "/app", "destination": "/", "permanent": false },
+    { "source": "/app/", "destination": "/", "permanent": false }
+  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -16,7 +20,7 @@
       ]
     },
     {
-      "source": "/(app|vendor|rider|admin|login)(.*)",
+      "source": "/(app|apps|vendor|rider|admin|login)(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]

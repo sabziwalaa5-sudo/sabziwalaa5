@@ -1540,7 +1540,7 @@ export default function Home() {
       {/* ═══════ STAFF PORTAL LINKS ═══════ */}
       <footer style={{ padding: "16px 16px calc(88px + env(safe-area-inset-bottom))", textAlign: "center" }}>
         <p style={{ margin: "0 0 8px", fontSize: "0.8rem" }}>
-          <a href="/app" style={{ color: "var(--accent)", fontWeight: 800, textDecoration: "none" }}>Get the Sabjiwala app</a>
+          <a href="/apps" style={{ color: "var(--accent)", fontWeight: 800, textDecoration: "none" }}>Get the Sabjiwala app</a>
         </p>
         <StaffLoginLinks compact />
       </footer>

@@ -1,4 +1,4 @@
-export const MOBILE_APP_PATH = "/app";
+export const MOBILE_APP_PATH = "/apps";
 export const MOBILE_ROLE_STORAGE_KEY = "sabjiwala_mobile_role";
 
 export type MobileRoleId = "customer" | "admin" | "vendor" | "rider";

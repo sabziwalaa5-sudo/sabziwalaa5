@@ -201,7 +201,7 @@ assert(rupeesFromPoints(10, INITIAL_SETTINGS) === 10, "Default point value is �
 assert(rupeesFromPoints(10, { ...INITIAL_SETTINGS, rewardSettings: { ...INITIAL_SETTINGS.rewardSettings, pointValue: 0.5 } }) === 5, "Admin point value converts points to rupees");
 
 console.log("\n--- Testing Mobile App Launcher ---");
-assert(MOBILE_APP_PATH === "/app", "Mobile app home is /app");
+assert(MOBILE_APP_PATH === "/apps", "Mobile app home is /apps");
 assert(MOBILE_ROLES.length === 4, "Launcher exposes customer, admin, vendor, and rider");
 assert(MOBILE_ROLES.map((r) => r.id).join(",") === "customer,admin,vendor,rider", "Role order is customer → admin → vendor → rider");
 assert(roleById("admin")?.href === "/admin", "Admin role opens the admin web portal from the app");

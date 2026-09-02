@@ -41,8 +41,8 @@ export default function NativeShell() {
         const backListener = await App.addListener("backButton", ({ canGoBack }) => {
           if (canGoBack) {
             window.history.back();
-          } else if (window.location.pathname !== "/app") {
-            window.location.assign("/app");
+          } else if (window.location.pathname !== "/" && window.location.pathname !== "/apps") {
+            window.location.assign("/");
           } else {
             App.exitApp();
           }
@@ -51,7 +51,7 @@ export default function NativeShell() {
         const urlListener = await App.addListener("appUrlOpen", ({ url }) => {
           try {
             const parsed = new URL(url);
-            const path = parsed.pathname && parsed.pathname !== "/" ? parsed.pathname : parsed.host ? `/${parsed.host}` : "/app";
+            const path = parsed.pathname && parsed.pathname !== "/" ? parsed.pathname : parsed.host ? `/${parsed.host}` : "/";
             window.location.assign(path + parsed.search);
           } catch {
             // Ignore malformed deep links.
@@ -86,7 +86,7 @@ export default function NativeShell() {
     };
   }, []);
 
-  const showApps = native && path !== "/app";
+  const showApps = native && path !== "/apps";
   if (!offline && !showApps) return null;
 
   return (
@@ -111,7 +111,7 @@ export default function NativeShell() {
       )}
       {showApps && (
         <a
-          href="/app"
+          href="/apps"
           style={{
             position: "fixed",
             top: "calc(10px + env(safe-area-inset-top))",

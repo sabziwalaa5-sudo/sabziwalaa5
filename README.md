@@ -7,7 +7,7 @@ Hyperlocal organic grocery marketplace: **customer storefront, admin, vendor, an
 | Surface | URL |
 |---|---|
 | Storefront | https://web-sabziwalaa5.vercel.app/ |
-| Mobile app home | https://web-sabziwalaa5.vercel.app/app |
+| Apps launcher | https://web-sabziwalaa5.vercel.app/apps |
 | Admin | https://web-sabziwalaa5.vercel.app/admin |
 | Vendor | https://web-sabziwalaa5.vercel.app/vendor |
 | Rider | https://web-sabziwalaa5.vercel.app/rider |
@@ -27,7 +27,7 @@ Copy `web/.env.example` to `web/.env.local` and set Supabase / Razorpay secrets 
 
 ## Mobile (Capacitor — ship this)
 
-App ID: `com.sabjiwala.app`. The native shell launches the live `/app` home (Customer / Admin / Vendor / Rider).
+App ID: `com.sabjiwala.app`. The native shell opens the live storefront (`/`). Role picker: `/apps`.
 
 ```bash
 cd web
@@ -43,7 +43,7 @@ cd web/android
 ./gradlew assembleDebug
 ```
 
-GitHub Actions (`Android APK`) uploads `app-debug.apk` on PRs to `main`.
+GitHub Actions (`Android APK`) uploads `app-debug.apk` on PRs to `main`. Open the **run** page and use **Summary → Artifacts**. Do not use `/suites/.../artifacts/...` links (those 404).
 
 ## Backend (optional API)
 

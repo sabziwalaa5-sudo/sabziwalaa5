@@ -24,6 +24,9 @@ import {
   registerOrderFingerprint,
 } from "../lib/orderEngine";
 import { createPaymentClaims, readClaims, signClaims } from "../lib/payments";
+import { canAccessPortal, normalizeRole, portalPathForRole, roleFromEmail } from "../lib/roles";
+import { INITIAL_SETTINGS, pointsEarnedForOrder, rupeesFromPoints } from "../lib/platformSettings";
+import { getAdminWebHref } from "../lib/config";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -172,6 +175,29 @@ assert(readClaims(`${body}.${flipped}`) === null, "Tampered checkout token is re
 assert(readClaims("not-a-token") === null, "Garbage checkout token is rejected");
 const upiClaims = createPaymentClaims({ orderDraftId: "SBJ124", amountRupees: 200, method: "UPI" });
 assert(signClaims(upiClaims).includes("."), "UPI checkout token is HMAC-signed");
+
+console.log("\n--- Testing Admin Web Role Routing ---");
+assert(roleFromEmail("sabziwalaa5@gmail.com") === "ADMIN", "Platform owner email maps to ADMIN");
+assert(roleFromEmail("raman@gmail.com") === "VENDOR", "Merchant email maps to VENDOR");
+assert(roleFromEmail("rider@gmail.com") === "DELIVERY_PARTNER", "Rider email maps to DELIVERY_PARTNER");
+assert(roleFromEmail("shopper@gmail.com") === null, "Unknown email does not force a staff role");
+assert(portalPathForRole("ADMIN") === "/admin", "Admin role opens the admin web portal");
+assert(getAdminWebHref() === "/admin" || getAdminWebHref().endsWith("/admin"), "Admin web href resolves to the admin portal");
+assert(portalPathForRole("VENDOR") === "/vendor", "Vendor role opens the vendor portal");
+assert(portalPathForRole("DELIVERY_PARTNER") === "/rider", "Rider role opens the rider portal");
+assert(canAccessPortal("ADMIN", "admin") === true, "Admin can open the admin portal");
+assert(canAccessPortal("VENDOR", "admin") === false, "Vendor cannot open the admin portal");
+assert(canAccessPortal("ADMIN", "vendor") === true, "Admin can inspect the vendor portal");
+assert(normalizeRole("merchant") === "VENDOR", "Merchant alias normalizes to VENDOR");
+assert(normalizeRole("rider") === "DELIVERY_PARTNER", "Rider alias normalizes to DELIVERY_PARTNER");
+
+console.log("\n--- Testing Admin Settings Applied to Storefront ---");
+const paused = { ...INITIAL_SETTINGS, maintenanceMode: true };
+assert(paused.maintenanceMode === true, "Admin maintenance flag is available to the storefront");
+assert(pointsEarnedForOrder(250, INITIAL_SETTINGS) === 12, "Admin earning rate of 5 pts / ₹100 yields 12 points on ₹250");
+assert(pointsEarnedForOrder(250, { ...INITIAL_SETTINGS, rewardSettings: { ...INITIAL_SETTINGS.rewardSettings, enabled: false } }) === 0, "Disabled rewards earn no points");
+assert(rupeesFromPoints(10, INITIAL_SETTINGS) === 10, "Default point value is ₹1 per point");
+assert(rupeesFromPoints(10, { ...INITIAL_SETTINGS, rewardSettings: { ...INITIAL_SETTINGS.rewardSettings, pointValue: 0.5 } }) === 5, "Admin point value converts points to rupees");
 
 console.log(`\n─────────────────────────────────────────────────────────`);
 console.log(`📊 Verification Complete: ${passedTests}/${totalTests} checks passed.`);

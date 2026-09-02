@@ -5,6 +5,9 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Store, DollarSign, Package, ShoppingBag, BarChart } from "lucide-react";
 import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PRODUCTS, INITIAL_ORDERS } from "../../lib/sharedState";
+import { resolveUserRole } from "../../lib/resolveRole";
+import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
+import AppLoadingShell from "../../components/AppLoadingShell";
 
 export default function VendorPortal() {
   const [mounted, setMounted] = useState(false);
@@ -76,40 +79,7 @@ export default function VendorPortal() {
 
   const verifySessionRole = async (user: any) => {
     const email = user.email || "";
-    let role = "CUSTOMER";
-
-    if (email.toLowerCase() === "sabziwalaa5@gmail.com") {
-      role = "ADMIN";
-    } else if (email.toLowerCase() === "raman@gmail.com") {
-      role = "VENDOR";
-    } else if (email.toLowerCase() === "rider@gmail.com" || email.toLowerCase() === "delivery@gmail.com") {
-      role = "DELIVERY_PARTNER";
-    } else {
-      try {
-        // Try querying 'profiles' first (MVP schema)
-        const { data: profileMvp } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (profileMvp?.role) {
-          role = profileMvp.role.toUpperCase();
-        } else {
-          // Fallback to 'users' table (production schema)
-          const { data: profileProd } = await supabase
-            .from("users")
-            .select("role")
-            .eq("uid", user.id)
-            .maybeSingle();
-          if (profileProd?.role) {
-            role = profileProd.role.toUpperCase();
-          }
-        }
-      } catch (e) {
-        console.error("Error checking role", e);
-      }
-    }
+    const role = await resolveUserRole(user);
 
     if (role === "VENDOR" || role === "ADMIN") {
       setUserEmail(email);
@@ -261,7 +231,7 @@ export default function VendorPortal() {
   };
 
   if (!mounted) {
-    return <div style={{ minHeight: "100vh", background: "#ffffff" }} />;
+    return <AppLoadingShell label="Opening merchant hub…" />;
   }
 
   const currentVendor = getCurrentVendorRecord();
@@ -327,6 +297,7 @@ export default function VendorPortal() {
               <a href="/" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: "600", textDecoration: "none" }}>
                 <ArrowLeft size={16} /> Back to Grocery Marketplace
               </a>
+              <StaffLoginLinks />
             </div>
           </div>
         </div>
@@ -345,7 +316,8 @@ export default function VendorPortal() {
               </div>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+              <PortalNav role={userRole === "ADMIN" || userRole === "VENDOR" ? (userRole as "ADMIN" | "VENDOR") : null} current="vendor" compact />
               <span className="badge badge-success" style={{ fontSize: "0.7rem", textTransform: "uppercase" }}>Approved Vendor</span>
               <button onClick={handleSignOut} className="btn btn-secondary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem", borderRadius: "8px" }}>Sign Out</button>
             </div>

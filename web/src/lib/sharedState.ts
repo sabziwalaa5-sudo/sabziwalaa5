@@ -7,7 +7,8 @@ export const STATE_KEYS = {
   VENDORS: "sabjiwala_vendors_list",
   WALLETS: "sabjiwala_wallets_list",
   COUPONS: "sabjiwala_coupons_list",
-  CAMPAIGNS: "sabjiwala_campaigns_list"
+  CAMPAIGNS: "sabjiwala_campaigns_list",
+  SETTINGS: "sabjiwala_platform_settings"
 };
 
 // Initial Vendors list

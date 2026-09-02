@@ -2,6 +2,10 @@
 
 The production website stays on Vercel. Native apps wrap that site in Capacitor (`com.sabjiwala.app`) and load `https://web-sabziwalaa5.vercel.app` by default.
 
+The **admin web version** is the same deployment at `/admin` (`https://web-sabziwalaa5.vercel.app/admin`). Catalog, orders, coupons, vendor status, maintenance mode, minimum order, free-delivery threshold, and reward rates set in Admin apply to the customer storefront and the native WebView. Staff emails (`sabziwalaa5@gmail.com`) get an in-app link to the Admin dashboard; vendor and rider portals live at `/vendor` and `/rider`.
+
+Override the admin URL with `NEXT_PUBLIC_ADMIN_URL` if you ever host admin separately.
+
 ## Prerequisites
 
 - Node.js 20+

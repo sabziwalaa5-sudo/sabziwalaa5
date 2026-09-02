@@ -4,7 +4,7 @@
     "details": [
       {
         "appID": "TEAMID.com.sabjiwala.app",
-        "paths": ["*", "/"]
+        "paths": ["/", "/admin", "/admin/*", "/vendor", "/vendor/*", "/rider", "/rider/*", "*"]
       }
     ]
   },

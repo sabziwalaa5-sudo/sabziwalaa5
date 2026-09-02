@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { isNativeRuntime, shouldRegisterServiceWorker } from "../lib/platform";
-import { isSupabaseReachable } from "../lib/supabase";
+import { isSupabaseReachable } from "../lib/supabaseConfig";
 
 export default function NativeShell() {
   const [offline, setOffline] = useState(false);

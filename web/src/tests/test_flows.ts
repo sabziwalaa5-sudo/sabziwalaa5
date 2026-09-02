@@ -28,7 +28,7 @@ import { canAccessPortal, normalizeRole, portalPathForRole, roleFromEmail } from
 import { INITIAL_SETTINGS, pointsEarnedForOrder, rupeesFromPoints } from "../lib/platformSettings";
 import { getAdminWebHref, MOBILE_APP_PATH } from "../lib/config";
 import { MOBILE_ROLES, isMobileRoleId, roleById } from "../lib/mobileApp";
-import { isSupabaseConfigured } from "../lib/supabase";
+import { isSupabaseConfigured } from "../lib/supabaseConfig";
 
 let totalTests = 0;
 let passedTests = 0;

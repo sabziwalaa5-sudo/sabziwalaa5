@@ -42,7 +42,11 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="web-sabziwalaa5.vercel.app" />
+                <data android:scheme="https" android:host="web-sabziwalaa5.vercel.app" android:pathPrefix="/app" />
+                <data android:scheme="https" android:host="web-sabziwalaa5.vercel.app" android:pathPrefix="/admin" />
+                <data android:scheme="https" android:host="web-sabziwalaa5.vercel.app" android:pathPrefix="/vendor" />
+                <data android:scheme="https" android:host="web-sabziwalaa5.vercel.app" android:pathPrefix="/rider" />
+                <data android:scheme="https" android:host="web-sabziwalaa5.vercel.app" android:path="/" />
             </intent-filter>
         </activity>
 

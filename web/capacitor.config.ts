@@ -29,7 +29,7 @@ const config: CapacitorConfig = {
       "checkout.razorpay.com",
       "api.razorpay.com",
     ],
-    url: liveServerUrl || "https://web-sabziwalaa5.vercel.app",
+    url: liveServerUrl || "https://web-sabziwalaa5.vercel.app/app",
   },
   plugins: {
     SplashScreen: {

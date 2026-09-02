@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, react/no-unescaped-entities */
 
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase";
+import { supabase, requireSupabaseAuth } from "../../lib/supabase";
 import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Store, DollarSign, Package, ShoppingBag, BarChart } from "lucide-react";
 import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PRODUCTS, INITIAL_ORDERS } from "../../lib/sharedState";
 import { resolveUserRole } from "../../lib/resolveRole";
@@ -97,6 +97,7 @@ export default function VendorPortal() {
     setAuthLoading(true);
     setAuthError(null);
     try {
+      await requireSupabaseAuth();
       const { data, error } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: loginPassword

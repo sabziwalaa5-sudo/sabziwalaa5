@@ -25,6 +25,8 @@ npm run dev
 
 Copy `web/.env.example` to `web/.env.local` and set Supabase / Razorpay secrets for production auth and payments.
 
+On Vercel, `NEXT_PUBLIC_SUPABASE_URL` must be a **live** project (`*.supabase.co` must resolve in DNS). A deleted project produces Chrome `DNS_PROBE_FINISHED_BAD_CONFIG` and looks like the app is broken.
+
 ## Mobile (Capacitor — ship this)
 
 App ID: `com.sabjiwala.app`. The native shell opens the live storefront (`/`). Role picker: `/apps`.

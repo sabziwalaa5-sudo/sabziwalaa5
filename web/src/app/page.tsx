@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, react/no-unescaped-entities */
 
 import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase, startGoogleOAuth, requireSupabaseAuth } from "../lib/supabase";
 import { validateOrder, validateCouponCode, validateEmail } from "../lib/validation";
 import { RateLimits } from "../lib/rateLimiter";
 import { buildCartItems, computeBill, nextCartQuantity, orderFingerprint } from "../lib/orderEngine";
@@ -189,13 +189,8 @@ export default function Home() {
     try {
       setAuthLoading(true);
       setAuthError(null);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: typeof window !== 'undefined' ? window.location.href : undefined,
-        },
-      });
-      if (error) throw error;
+      const result = await startGoogleOAuth(window.location.href);
+      if (result.error) throw new Error(result.error);
     } catch (err: any) {
       setAuthError(err.message || "Google Sign-In failed. Use email login instead.");
     } finally {
@@ -222,6 +217,7 @@ export default function Home() {
     try {
       setAuthLoading(true);
       setAuthError(null);
+      await requireSupabaseAuth();
       const action = isRegistering
         ? supabase.auth.signUp({ email: emailCheck.sanitized, password: loginPassword })
         : supabase.auth.signInWithPassword({ email: emailCheck.sanitized, password: loginPassword });

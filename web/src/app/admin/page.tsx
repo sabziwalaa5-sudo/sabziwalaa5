@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, react/no-unescaped-entities */
 
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase";
+import { supabase, startGoogleOAuth, requireSupabaseAuth } from "../../lib/supabase";
 import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Settings, Gift, FileText, ShoppingBag, Store, Users, Tag, AlertTriangle, Truck } from "lucide-react";
 import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_WALLETS, INITIAL_COUPONS, INITIAL_CAMPAIGNS } from "../../lib/sharedState";
 import { resolveUserRole } from "../../lib/resolveRole";
@@ -156,15 +156,11 @@ export default function AdminPortal() {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: typeof window !== 'undefined' ? window.location.href : undefined,
-        },
-      });
-      if (error) throw error;
+      const result = await startGoogleOAuth(window.location.href);
+      if (result.error) throw new Error(result.error);
     } catch (err: any) {
       setAuthError(err.message || "Google Sign-In failed.");
+    } finally {
       setAuthLoading(false);
     }
   };
@@ -174,6 +170,7 @@ export default function AdminPortal() {
     setAuthLoading(true);
     setAuthError(null);
     try {
+      await requireSupabaseAuth();
       const { data, error } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: loginPassword

@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, react/no-unescaped-entities */
 
 import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "../../lib/supabase";
+import { supabase, requireSupabaseAuth } from "../../lib/supabase";
 import { Eye, Shield, Clock, MapPin, Truck, Check, X, ArrowLeft, DollarSign, List, ToggleLeft, ToggleRight, Info } from "lucide-react";
 import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_ORDERS } from "../../lib/sharedState";
 import { resolveUserRole } from "../../lib/resolveRole";
@@ -141,6 +141,7 @@ export default function RiderPortal() {
     setAuthLoading(true);
     setAuthError(null);
     try {
+      await requireSupabaseAuth();
       const { data, error } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: loginPassword

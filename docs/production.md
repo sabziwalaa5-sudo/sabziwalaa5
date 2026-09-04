@@ -27,9 +27,10 @@ https://web-sabziwalaa5.vercel.app/download
 ## Supabase (optional, for Google/email customer login)
 
 1. Create a project at https://supabase.com/dashboard
-2. Copy Project URL + anon/publishable key
+2. Copy Project URL + publishable key (`sb_publishable_...`)
 3. Vercel → Environment Variables → **Config** (not Secret):
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_SUPABASE_URL` = `https://qbcchkhjbrijrqubzvtk.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` = publishable key
+   (legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` still works if you have the old JWT)
 4. Redeploy
-5. Run `docs/supabase_setup.sql` in the SQL editor
+5. Auth → URL Configuration: Site URL `https://web-sabziwalaa5.vercel.app` and redirect `https://web-sabziwalaa5.vercel.app/**`

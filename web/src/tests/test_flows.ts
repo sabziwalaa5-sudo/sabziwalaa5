@@ -214,7 +214,7 @@ assert(MOBILE_DOWNLOAD_PATH === "/download", "Download page is /download");
 
 console.log("\n--- Testing Auth Host Configuration ---");
 assert(isSupabaseConfigured("https://placeholder-project.supabase.co") === false, "Placeholder Supabase host is rejected");
-assert(isSupabaseConfigured("https://abcdefghijklmnop.supabase.co") === true, "Real supabase.co project host is accepted");
+assert(isSupabaseConfigured("https://qbcchkhjbrijrqubzvtk.supabase.co") === true, "Restored Sabjiwala Supabase host is accepted");
 assert(isSupabaseConfigured("not-a-url") === false, "Invalid URL is rejected");
 
 console.log("\n--- Testing Staff Portal Bootstrap ---");

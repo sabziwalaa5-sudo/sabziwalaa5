@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import NativeShell from "../components/NativeShell";
+import OpsBanner from "../components/OpsBanner";
 
 export const metadata: Metadata = {
   title: "SABJIWALAA ५ - Hyperlocal Organic Grocery Marketplace",
@@ -51,6 +52,7 @@ export default function RootLayout({
       </head>
       <body>
         <NativeShell />
+        <OpsBanner />
         {children}
       </body>
     </html>

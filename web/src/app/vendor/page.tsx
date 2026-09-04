@@ -8,6 +8,8 @@ import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PR
 import { resolveUserRole } from "../../lib/resolveRole";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
+import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
+import { canAccessPortal } from "../../lib/roles";
 
 export default function VendorPortal() {
   const [mounted, setMounted] = useState(false);
@@ -54,7 +56,13 @@ export default function VendorPortal() {
     window.addEventListener("sabjiwala_state_update", syncState);
     window.addEventListener("storage", syncState);
 
-    // Check session
+    fetchStaffSession().then((session) => {
+      if (session && canAccessPortal(session.role, "vendor")) {
+        setUserEmail(session.email);
+        setUserRole(session.role);
+      }
+    });
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         verifySessionRole(session.user);
@@ -64,9 +72,6 @@ export default function VendorPortal() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         verifySessionRole(session.user);
-      } else {
-        setUserEmail(null);
-        setUserRole(null);
       }
     });
 
@@ -97,13 +102,21 @@ export default function VendorPortal() {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginPassword
-      });
-      if (error) throw error;
-    } catch (err: any) {
-      setAuthError(err.message || "Invalid login credentials.");
+      const staff = await loginStaffPortal(loginEmail, loginPassword, "vendor");
+      setUserEmail(staff.email);
+      setUserRole(staff.role);
+    } catch (staffErr: any) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: loginPassword
+        });
+        if (error) throw error;
+        if (data.user) await verifySessionRole(data.user);
+      } catch (err: any) {
+        setAuthError(staffErr.message || err.message || "Invalid login credentials.");
+      }
+    } finally {
       setAuthLoading(false);
     }
   };
@@ -111,6 +124,7 @@ export default function VendorPortal() {
   const handleSignOut = async () => {
     setAuthLoading(true);
     try {
+      await logoutStaffPortal();
       await supabase.auth.signOut();
     } catch (e) {
       console.error(e);
@@ -123,7 +137,8 @@ export default function VendorPortal() {
 
   const getCurrentVendorRecord = () => {
     if (!userEmail) return null;
-    return vendorsList.find(v => v.email.toLowerCase() === userEmail.toLowerCase()) || vendorsList[1]; // fallback to Raman
+    return vendorsList.find(v => v.email.toLowerCase() === userEmail.toLowerCase())
+      || (userRole === "ADMIN" ? vendorsList.find(v => v.status === "Active") || vendorsList[0] : null);
   };
 
   const getFilteredVendorOrders = () => {
@@ -281,6 +296,9 @@ export default function VendorPortal() {
                   onChange={(e) => setLoginPassword(e.target.value)}
                   style={{ padding: "0.6rem 1rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.9rem" }}
                 />
+                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0.35rem 0 0" }}>
+                  Use <strong>raman@gmail.com</strong> and PIN <strong>Sabjiwala5!</strong>
+                </p>
               </div>
 
               <button

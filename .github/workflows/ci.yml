@@ -26,6 +26,8 @@ jobs:
 
   backend:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sabjiwala?schema=public
     defaults:
       run:
         working-directory: backend

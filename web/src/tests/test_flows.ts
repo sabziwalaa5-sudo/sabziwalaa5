@@ -27,7 +27,9 @@ import { createPaymentClaims, readClaims, signClaims } from "../lib/payments";
 import { canAccessPortal, normalizeRole, portalPathForRole, roleFromEmail } from "../lib/roles";
 import { INITIAL_SETTINGS, pointsEarnedForOrder, rupeesFromPoints } from "../lib/platformSettings";
 import { getAdminWebHref, MOBILE_APP_PATH } from "../lib/config";
-import { MOBILE_ROLES, isMobileRoleId, roleById } from "../lib/mobileApp";
+import { MOBILE_ROLES, isMobileRoleId, roleById, ANDROID_APK_PATH, MOBILE_DOWNLOAD_PATH } from "../lib/mobileApp";
+import { isSupabaseConfigured } from "../lib/supabaseConfig";
+import { authorizeStaffLogin, DEFAULT_STAFF_BOOTSTRAP_PASSWORD, readStaffSession, signStaffSession } from "../lib/staffAuth";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -201,12 +203,33 @@ assert(rupeesFromPoints(10, INITIAL_SETTINGS) === 10, "Default point value is �
 assert(rupeesFromPoints(10, { ...INITIAL_SETTINGS, rewardSettings: { ...INITIAL_SETTINGS.rewardSettings, pointValue: 0.5 } }) === 5, "Admin point value converts points to rupees");
 
 console.log("\n--- Testing Mobile App Launcher ---");
-assert(MOBILE_APP_PATH === "/app", "Mobile app home is /app");
+assert(MOBILE_APP_PATH === "/apps", "Mobile app home is /apps");
 assert(MOBILE_ROLES.length === 4, "Launcher exposes customer, admin, vendor, and rider");
 assert(MOBILE_ROLES.map((r) => r.id).join(",") === "customer,admin,vendor,rider", "Role order is customer → admin → vendor → rider");
 assert(roleById("admin")?.href === "/admin", "Admin role opens the admin web portal from the app");
 assert(isMobileRoleId("rider") === true, "Rider is a valid mobile role");
 assert(isMobileRoleId("hacker") === false, "Unknown roles are rejected");
+assert(ANDROID_APK_PATH === "/downloads/sabjiwala.apk", "Android APK is hosted on the site");
+assert(MOBILE_DOWNLOAD_PATH === "/download", "Download page is /download");
+
+console.log("\n--- Testing Auth Host Configuration ---");
+assert(isSupabaseConfigured("https://placeholder-project.supabase.co") === false, "Placeholder Supabase host is rejected");
+assert(isSupabaseConfigured("https://qbcchkhjbrijrqubzvtk.supabase.co") === true, "Restored Sabjiwala Supabase host is accepted");
+assert(isSupabaseConfigured("not-a-url") === false, "Invalid URL is rejected");
+
+console.log("\n--- Testing Staff Portal Bootstrap ---");
+const adminOk = authorizeStaffLogin({ email: "sabziwalaa5@gmail.com", password: DEFAULT_STAFF_BOOTSTRAP_PASSWORD, portal: "admin" });
+assert("session" in adminOk && adminOk.session.role === "ADMIN", "Admin email opens the admin portal");
+const vendorDenied = authorizeStaffLogin({ email: "raman@gmail.com", password: DEFAULT_STAFF_BOOTSTRAP_PASSWORD, portal: "admin" });
+assert("error" in vendorDenied, "Vendor cannot open the admin portal");
+const riderOk = authorizeStaffLogin({ email: "rider@gmail.com", password: DEFAULT_STAFF_BOOTSTRAP_PASSWORD, portal: "rider" });
+assert("session" in riderOk, "Rider email opens the rider portal");
+const badPass = authorizeStaffLogin({ email: "sabziwalaa5@gmail.com", password: "wrong", portal: "admin" });
+assert("error" in badPass, "Wrong staff PIN is rejected");
+if ("session" in adminOk) {
+  const roundTrip = readStaffSession(signStaffSession(adminOk.session));
+  assert(roundTrip?.email === "sabziwalaa5@gmail.com", "Staff session cookie round-trips");
+}
 
 console.log(`\n─────────────────────────────────────────────────────────`);
 console.log(`📊 Verification Complete: ${passedTests}/${totalTests} checks passed.`);

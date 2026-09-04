@@ -1,4 +1,6 @@
-export const MOBILE_APP_PATH = "/app";
+export const MOBILE_APP_PATH = "/apps";
+export const ANDROID_APK_PATH = "/downloads/sabjiwala.apk";
+export const MOBILE_DOWNLOAD_PATH = "/download";
 export const MOBILE_ROLE_STORAGE_KEY = "sabjiwala_mobile_role";
 
 export type MobileRoleId = "customer" | "admin" | "vendor" | "rider";

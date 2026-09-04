@@ -12,6 +12,11 @@ export const STATE_KEYS = {
 };
 
 // Initial Vendors list
+export const INITIAL_RIDERS = [
+  { id: "r1", name: "Rider Agent", email: "rider@gmail.com", mobile: "9810000001", status: "Online" },
+  { id: "r2", name: "Delivery Desk", email: "delivery@gmail.com", mobile: "9810000002", status: "Standby" },
+];
+
 export const INITIAL_VENDORS = [
   { vendor_id: "v1", vendor_name: "Akshay Bhaiya", shop_name: "Akshay Farms (Rajokri Hub)", mobile: "9876543210", email: "sabziwalaa5@gmail.com", address: "Rajokri Crossroad, New Delhi", status: "Active", lat: 28.5305, lng: 77.1048 },
   { vendor_id: "v2", vendor_name: "Raman Kumar", shop_name: "Vasant Kunj Organic Depot", mobile: "9999888877", email: "raman@gmail.com", address: "Sector B-10, Vasant Kunj, Delhi", status: "Active", lat: 28.5450, lng: 77.1560 },

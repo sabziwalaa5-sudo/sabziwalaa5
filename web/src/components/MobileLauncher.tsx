@@ -122,6 +122,13 @@ export default function MobileLauncher() {
             web-sabziwalaa5.vercel.app
           </a>
         </p>
+        {!native && (
+          <p style={{ textAlign: "center", marginTop: 10 }}>
+            <a href="/download" style={{ color: "var(--accent)", fontWeight: 800, fontSize: 14 }}>
+              Android APK download
+            </a>
+          </p>
+        )}
       </div>
     </main>
   );

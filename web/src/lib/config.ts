@@ -8,7 +8,7 @@ export const PRODUCTION_WEB_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://web-sabziwalaa5.vercel.app";
 
 export const ADMIN_WEB_PATH = "/admin";
-export const MOBILE_APP_PATH = "/app";
+export const MOBILE_APP_PATH = "/apps";
 
 export function getApiBaseUrl(): string {
   if (typeof window === "undefined") {

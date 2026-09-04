@@ -2,11 +2,13 @@
 
 The **shippable Android / iOS app** is Capacitor in `web/` (`com.sabjiwala.app`). It opens the live linked site:
 
-- App home: https://web-sabziwalaa5.vercel.app/app
-- Customer: https://web-sabziwalaa5.vercel.app/
+- Storefront (APK start URL): https://web-sabziwalaa5.vercel.app/
+- Apps launcher: https://web-sabziwalaa5.vercel.app/apps
 - Admin: https://web-sabziwalaa5.vercel.app/admin
 - Vendor: https://web-sabziwalaa5.vercel.app/vendor
 - Rider: https://web-sabziwalaa5.vercel.app/rider
+
+`/app` redirects to `/` so older APKs that opened `/app` do not land on a 404.
 
 `mobile/` is an optional Flutter wrapper of the same URLs. Capacitor is the app to ship.
 
@@ -18,7 +20,7 @@ The **shippable Android / iOS app** is Capacitor in `web/` (`com.sabjiwala.app`)
 
 ## Run the mobile home in a browser
 
-https://web-sabziwalaa5.vercel.app/app
+https://web-sabziwalaa5.vercel.app/apps
 
 ## Android (Capacitor)
 
@@ -38,7 +40,8 @@ cd web/android
 
 APK: `web/android/app/build/outputs/apk/debug/app-debug.apk`
 
-GitHub Actions also builds this APK on each PR (`Android APK` workflow).
+Direct install page: https://web-sabziwalaa5.vercel.app/download
+Hosted APK: https://web-sabziwalaa5.vercel.app/downloads/sabjiwala.apk
 
 ## iOS (Capacitor)
 
@@ -54,7 +57,7 @@ Bundle ID: `com.sabjiwala.app`
 Point a device at a local Next server:
 
 ```bash
-CAPACITOR_SERVER_URL=http://192.168.1.10:3000/app npx cap sync
+CAPACITOR_SERVER_URL=http://192.168.1.10:3000/ npx cap sync
 ```
 
 ## Flutter (optional)

@@ -1,7 +1,48 @@
 import { createClient } from "@supabase/supabase-js";
+import { isNativeRuntime } from "./platform";
+import {
+  SUPABASE_UNAVAILABLE_MESSAGE,
+  getSupabaseAnonKey,
+  getSupabaseUrl,
+  isSupabaseReachable,
+} from "./supabaseConfig";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-project.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
+export {
+  SUPABASE_UNAVAILABLE_MESSAGE,
+  getSupabaseUrl,
+  isSupabaseConfigured,
+  isSupabaseReachable,
+  requireSupabaseAuth,
+} from "./supabaseConfig";
 
-// Exports a single client instance to prevent multiple connections
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey());
+
+/** Google OAuth without replacing the app WebView when DNS fails. */
+export async function startGoogleOAuth(redirectTo: string): Promise<{ error?: string }> {
+  if (!(await isSupabaseReachable())) {
+    return { error: SUPABASE_UNAVAILABLE_MESSAGE };
+  }
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+      skipBrowserRedirect: true,
+    },
+  });
+  if (error) return { error: error.message };
+  if (!data.url) return { error: "Google Sign-In failed. Use email login instead." };
+
+  if (isNativeRuntime()) {
+    try {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url: data.url });
+      return {};
+    } catch {
+      // Fall through to same-window navigation on web.
+    }
+  }
+
+  window.location.assign(data.url);
+  return {};
+}

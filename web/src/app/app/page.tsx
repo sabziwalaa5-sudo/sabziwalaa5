@@ -1,16 +1,6 @@
-import type { Metadata } from "next";
-import MobileLauncher from "../../components/MobileLauncher";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Sabjiwala app",
-  description: "Open the Sabjiwala customer, admin, vendor, or rider app.",
-  appleWebApp: {
-    capable: true,
-    title: "Sabjiwala",
-    statusBarStyle: "black-translucent",
-  },
-};
-
-export default function MobileAppPage() {
-  return <MobileLauncher />;
+/** Legacy Capacitor start URL. Production 404'd here; send users to the storefront. */
+export default function LegacyAppEntryPage() {
+  redirect("/");
 }

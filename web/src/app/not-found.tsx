@@ -10,6 +10,11 @@ export default function NotFound() {
       <a href="/" style={{ color: "var(--accent, #10b981)", textDecoration: "underline", marginBlockStart: "1rem", fontWeight: "600" }}>
         Go Back Home
       </a>
+      <p style={{ marginBlockStart: "1.25rem", fontSize: 14 }}>
+        <a href="/apps" style={{ color: "inherit" }}>Open the apps</a>
+        {" · "}
+        <a href="/admin" style={{ color: "inherit" }}>Admin</a>
+      </p>
     </div>
   );
 }

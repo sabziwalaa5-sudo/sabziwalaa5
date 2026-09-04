@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { isNativeRuntime, shouldRegisterServiceWorker } from "../lib/platform";
+import { isSupabaseReachable } from "../lib/supabaseConfig";
 
 export default function NativeShell() {
   const [offline, setOffline] = useState(false);
   const [native, setNative] = useState(false);
   const [path, setPath] = useState("");
+  const [authDown, setAuthDown] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -22,6 +24,9 @@ export default function NativeShell() {
     setPath(window.location.pathname);
     window.addEventListener("online", applyNetwork);
     window.addEventListener("offline", applyNetwork);
+    isSupabaseReachable().then((ok) => {
+      if (!cancelled) setAuthDown(!ok);
+    });
 
     (async () => {
       try {
@@ -41,8 +46,8 @@ export default function NativeShell() {
         const backListener = await App.addListener("backButton", ({ canGoBack }) => {
           if (canGoBack) {
             window.history.back();
-          } else if (window.location.pathname !== "/app") {
-            window.location.assign("/app");
+          } else if (window.location.pathname !== "/" && window.location.pathname !== "/apps") {
+            window.location.assign("/");
           } else {
             App.exitApp();
           }
@@ -51,7 +56,7 @@ export default function NativeShell() {
         const urlListener = await App.addListener("appUrlOpen", ({ url }) => {
           try {
             const parsed = new URL(url);
-            const path = parsed.pathname && parsed.pathname !== "/" ? parsed.pathname : parsed.host ? `/${parsed.host}` : "/app";
+            const path = parsed.pathname && parsed.pathname !== "/" ? parsed.pathname : parsed.host ? `/${parsed.host}` : "/";
             window.location.assign(path + parsed.search);
           } catch {
             // Ignore malformed deep links.
@@ -86,8 +91,8 @@ export default function NativeShell() {
     };
   }, []);
 
-  const showApps = native && path !== "/app";
-  if (!offline && !showApps) return null;
+  const showApps = native && path !== "/apps";
+  if (!offline && !showApps && !authDown) return null;
 
   return (
     <>
@@ -109,9 +114,27 @@ export default function NativeShell() {
       You are offline. Cart and checkout need a network connection for payments.
     </div>
       )}
+      {authDown && !offline && (
+        <div
+          role="status"
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 4000,
+            background: "#92400e",
+            color: "white",
+            textAlign: "center",
+            padding: "8px 12px",
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          Sign-in server is unreachable. You can still browse the shop without logging in.
+        </div>
+      )}
       {showApps && (
         <a
-          href="/app"
+          href="/apps"
           style={{
             position: "fixed",
             top: "calc(10px + env(safe-area-inset-top))",

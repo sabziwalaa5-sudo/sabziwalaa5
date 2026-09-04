@@ -65,8 +65,17 @@ npx prisma validate
 npm run build
 ```
 
+## Staff portals
+
+https://web-sabziwalaa5.vercel.app/login
+
+PIN `Sabjiwala5!` — Admin `sabziwalaa5@gmail.com` · Vendor `raman@gmail.com` · Rider `rider@gmail.com`
+
+Details: `docs/production.md`
+
 ## Docs
 
+- `docs/production.md` — live staff portals and env
 - `docs/architecture.md` — system design
 - `docs/mobile_native.md` — Android / iOS
 - `docs/api_docs.md` — API

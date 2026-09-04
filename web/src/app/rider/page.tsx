@@ -2,12 +2,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, react/no-unescaped-entities */
 
 import React, { useState, useEffect, useRef } from "react";
-import { supabase, requireSupabaseAuth } from "../../lib/supabase";
+import { supabase } from "../../lib/supabase";
 import { Eye, Shield, Clock, MapPin, Truck, Check, X, ArrowLeft, DollarSign, List, ToggleLeft, ToggleRight, Info } from "lucide-react";
 import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_ORDERS } from "../../lib/sharedState";
 import { resolveUserRole } from "../../lib/resolveRole";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
+import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
+import { canAccessPortal } from "../../lib/roles";
 
 export default function RiderPortal() {
   const [mounted, setMounted] = useState(false);
@@ -46,7 +48,13 @@ export default function RiderPortal() {
     window.addEventListener("sabjiwala_state_update", syncState);
     window.addEventListener("storage", syncState);
 
-    // Check session
+    fetchStaffSession().then((session) => {
+      if (session && canAccessPortal(session.role, "rider")) {
+        setUserEmail(session.email);
+        setUserRole(session.role);
+      }
+    });
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         verifySessionRole(session.user);
@@ -56,9 +64,6 @@ export default function RiderPortal() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         verifySessionRole(session.user);
-      } else {
-        setUserEmail(null);
-        setUserRole(null);
       }
     });
 
@@ -141,14 +146,21 @@ export default function RiderPortal() {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      await requireSupabaseAuth();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginPassword
-      });
-      if (error) throw error;
-    } catch (err: any) {
-      setAuthError(err.message || "Invalid login credentials.");
+      const staff = await loginStaffPortal(loginEmail, loginPassword, "rider");
+      setUserEmail(staff.email);
+      setUserRole(staff.role);
+    } catch (staffErr: any) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: loginPassword
+        });
+        if (error) throw error;
+        if (data.user) await verifySessionRole(data.user);
+      } catch (err: any) {
+        setAuthError(staffErr.message || err.message || "Invalid login credentials.");
+      }
+    } finally {
       setAuthLoading(false);
     }
   };
@@ -156,6 +168,7 @@ export default function RiderPortal() {
   const handleSignOut = async () => {
     setAuthLoading(true);
     try {
+      await logoutStaffPortal();
       await supabase.auth.signOut();
     } catch (e) {
       console.error(e);
@@ -227,6 +240,9 @@ export default function RiderPortal() {
                   onChange={(e) => setLoginPassword(e.target.value)}
                   style={{ padding: "0.6rem 1rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.9rem" }}
                 />
+                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0.35rem 0 0" }}>
+                  Use <strong>rider@gmail.com</strong> and PIN <strong>Sabjiwala5!</strong>
+                </p>
               </div>
 
               <button

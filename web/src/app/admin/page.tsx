@@ -2,13 +2,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, react/no-unescaped-entities */
 
 import React, { useState, useEffect } from "react";
-import { supabase, startGoogleOAuth, requireSupabaseAuth } from "../../lib/supabase";
+import { supabase, startGoogleOAuth } from "../../lib/supabase";
 import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Settings, Gift, FileText, ShoppingBag, Store, Users, Tag, AlertTriangle, Truck } from "lucide-react";
 import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_WALLETS, INITIAL_COUPONS, INITIAL_CAMPAIGNS } from "../../lib/sharedState";
 import { resolveUserRole } from "../../lib/resolveRole";
 import { getPlatformSettings, setPlatformSettings, INITIAL_SETTINGS } from "../../lib/platformSettings";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
+import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
+import { canAccessPortal } from "../../lib/roles";
+import { INITIAL_RIDERS } from "../../lib/sharedState";
 
 export default function AdminPortal() {
   const [mounted, setMounted] = useState(false);
@@ -98,7 +101,13 @@ export default function AdminPortal() {
     window.addEventListener("storage", syncState);
     syncState();
 
-    // Check session
+    fetchStaffSession().then((session) => {
+      if (session && canAccessPortal(session.role, "admin")) {
+        setUserEmail(session.email);
+        setUserRole(session.role);
+      }
+    });
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         verifySessionRole(session.user);
@@ -108,9 +117,6 @@ export default function AdminPortal() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         verifySessionRole(session.user);
-      } else {
-        setUserEmail(null);
-        setUserRole(null);
       }
     });
 
@@ -170,14 +176,21 @@ export default function AdminPortal() {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      await requireSupabaseAuth();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginPassword
-      });
-      if (error) throw error;
-    } catch (err: any) {
-      setAuthError(err.message || "Invalid login credentials.");
+      const staff = await loginStaffPortal(loginEmail, loginPassword, "admin");
+      setUserEmail(staff.email);
+      setUserRole(staff.role);
+    } catch (staffErr: any) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: loginPassword
+        });
+        if (error) throw error;
+        if (data.user) await verifySessionRole(data.user);
+      } catch (err: any) {
+        setAuthError(staffErr.message || err.message || "Invalid login credentials.");
+      }
+    } finally {
       setAuthLoading(false);
     }
   };
@@ -185,6 +198,7 @@ export default function AdminPortal() {
   const handleSignOut = async () => {
     setAuthLoading(true);
     try {
+      await logoutStaffPortal();
       await supabase.auth.signOut();
     } catch (e) {
       console.error(e);
@@ -414,6 +428,9 @@ export default function AdminPortal() {
                   onChange={(e) => setLoginPassword(e.target.value)}
                   style={{ padding: "0.6rem 1rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.9rem" }}
                 />
+                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0.35rem 0 0" }}>
+                  Live staff PIN (change with STAFF_BOOTSTRAP_PASSWORD): <strong>Sabjiwala5!</strong>
+                </p>
               </div>
 
               <button
@@ -583,13 +600,15 @@ export default function AdminPortal() {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr style={{ borderBottom: "1px solid var(--border)", fontSize: "0.85rem" }}>
-                        <td style={{ padding: "1rem" }}><strong>Rider Agent (Raman)</strong></td>
-                        <td style={{ padding: "1rem" }}>rider@gmail.com</td>
+                      {INITIAL_RIDERS.map((rider) => (
+                      <tr key={rider.email} style={{ borderBottom: "1px solid var(--border)", fontSize: "0.85rem" }}>
+                        <td style={{ padding: "1rem" }}><strong>{rider.name}</strong></td>
+                        <td style={{ padding: "1rem" }}>{rider.email} · {rider.mobile}</td>
                         <td style={{ padding: "1rem" }}>Rider / Delivery Partner</td>
                         <td style={{ padding: "1rem" }}>{ordersList.filter(o => o.orderStatus === "Delivered").length} trips</td>
-                        <td style={{ padding: "1rem" }}><span className="badge badge-success">Online / Active</span></td>
+                        <td style={{ padding: "1rem" }}><span className="badge badge-success">{rider.status}</span></td>
                       </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>

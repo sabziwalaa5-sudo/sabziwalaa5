@@ -104,8 +104,8 @@ export default function Home() {
 
   // Address list management
   const [addresses, setAddresses] = useState<any[]>([
-    { id: "a1", tag: "Home", address: "Rajokri Crossroad, New Delhi", lat: 28.5284, lng: 77.1028, isDefault: true },
-    { id: "a2", tag: "Office", address: "Vasant Kunj Sector B, Delhi", lat: 28.5450, lng: 77.1560, isDefault: false }
+    { id: "a1", tag: "Home", address: "Rajokri Crossroad, New Delhi", phone: "9876543210", lat: 28.5284, lng: 77.1028, isDefault: true },
+    { id: "a2", tag: "Office", address: "Vasant Kunj Sector B, Delhi", phone: "9999888877", lat: 28.5450, lng: 77.1560, isDefault: false }
   ]);
   const [newAddressTag, setNewAddressTag] = useState("Home");
   const [newAddressText, setNewAddressText] = useState("");
@@ -457,6 +457,7 @@ export default function Home() {
     }
 
     const defaultAddress = addresses.find((a) => a.isDefault)?.address || locationName;
+    const customerMobile = String(addresses.find((a) => a.isDefault)?.phone || "").replace(/\D/g, "").slice(-10);
     const orderDraftId = `SBJ${Date.now().toString().slice(-8)}`;
     const fingerprint = orderFingerprint({
       email: userEmail,
@@ -473,7 +474,7 @@ export default function Home() {
       date: new Date().toLocaleString("en-IN"),
       customerName: userEmail.split("@")[0],
       customerEmail: userEmail,
-      customerMobile: "9876543210",
+      customerMobile: customerMobile || "0000000000",
       deliveryAddress: defaultAddress,
       paymentMethod: displayPaymentMethod(paymentMode),
       paymentStatus: paymentMode === "cod" ? "Pending" : "Pending",

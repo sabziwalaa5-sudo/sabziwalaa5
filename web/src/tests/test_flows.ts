@@ -29,6 +29,7 @@ import { INITIAL_SETTINGS, pointsEarnedForOrder, rupeesFromPoints } from "../lib
 import { getAdminWebHref, MOBILE_APP_PATH } from "../lib/config";
 import { MOBILE_ROLES, isMobileRoleId, roleById, ANDROID_APK_PATH, MOBILE_DOWNLOAD_PATH } from "../lib/mobileApp";
 import { isSupabaseConfigured } from "../lib/supabaseConfig";
+import { authorizeStaffLogin, DEFAULT_STAFF_BOOTSTRAP_PASSWORD, readStaffSession, signStaffSession } from "../lib/staffAuth";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -215,6 +216,20 @@ console.log("\n--- Testing Auth Host Configuration ---");
 assert(isSupabaseConfigured("https://placeholder-project.supabase.co") === false, "Placeholder Supabase host is rejected");
 assert(isSupabaseConfigured("https://abcdefghijklmnop.supabase.co") === true, "Real supabase.co project host is accepted");
 assert(isSupabaseConfigured("not-a-url") === false, "Invalid URL is rejected");
+
+console.log("\n--- Testing Staff Portal Bootstrap ---");
+const adminOk = authorizeStaffLogin({ email: "sabziwalaa5@gmail.com", password: DEFAULT_STAFF_BOOTSTRAP_PASSWORD, portal: "admin" });
+assert("session" in adminOk && adminOk.session.role === "ADMIN", "Admin email opens the admin portal");
+const vendorDenied = authorizeStaffLogin({ email: "raman@gmail.com", password: DEFAULT_STAFF_BOOTSTRAP_PASSWORD, portal: "admin" });
+assert("error" in vendorDenied, "Vendor cannot open the admin portal");
+const riderOk = authorizeStaffLogin({ email: "rider@gmail.com", password: DEFAULT_STAFF_BOOTSTRAP_PASSWORD, portal: "rider" });
+assert("session" in riderOk, "Rider email opens the rider portal");
+const badPass = authorizeStaffLogin({ email: "sabziwalaa5@gmail.com", password: "wrong", portal: "admin" });
+assert("error" in badPass, "Wrong staff PIN is rejected");
+if ("session" in adminOk) {
+  const roundTrip = readStaffSession(signStaffSession(adminOk.session));
+  assert(roundTrip?.email === "sabziwalaa5@gmail.com", "Staff session cookie round-trips");
+}
 
 console.log(`\n─────────────────────────────────────────────────────────`);
 console.log(`📊 Verification Complete: ${passedTests}/${totalTests} checks passed.`);

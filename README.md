@@ -47,6 +47,15 @@ cd web/android
 
 GitHub Actions (`Android APK`) uploads `app-debug.apk` on PRs to `main`. Open the **run** page and use **Summary → Artifacts**. Do not use `/suites/.../artifacts/...` links (those 404).
 
+Direct install (after this is deployed): https://web-sabziwalaa5.vercel.app/download
+
+## Android phone pe install
+
+1. https://web-sabziwalaa5.vercel.app/download kholo
+2. **Android APK download** dabao
+3. Phone mein unknown sources allow karo, phir `sabjiwala.apk` install karo
+4. App khulegi live shop par (`com.sabjiwala.app`)
+
 ## Backend (optional API)
 
 ```bash

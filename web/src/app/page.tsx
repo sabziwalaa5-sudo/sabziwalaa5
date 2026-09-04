@@ -1536,7 +1536,9 @@ export default function Home() {
       {/* ═══════ STAFF PORTAL LINKS ═══════ */}
       <footer style={{ padding: "16px 16px calc(88px + env(safe-area-inset-bottom))", textAlign: "center" }}>
         <p style={{ margin: "0 0 8px", fontSize: "0.8rem" }}>
-          <a href="/apps" style={{ color: "var(--accent)", fontWeight: 800, textDecoration: "none" }}>Get the Sabjiwala app</a>
+          <a href="/download" style={{ color: "var(--accent)", fontWeight: 800, textDecoration: "none" }}>Android app download</a>
+          {" · "}
+          <a href="/apps" style={{ color: "var(--accent)", fontWeight: 800, textDecoration: "none" }}>Open apps</a>
         </p>
         <StaffLoginLinks compact />
       </footer>

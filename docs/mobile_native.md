@@ -40,7 +40,8 @@ cd web/android
 
 APK: `web/android/app/build/outputs/apk/debug/app-debug.apk`
 
-GitHub Actions also builds this APK on each PR (`Android APK` workflow).
+Direct install page: https://web-sabziwalaa5.vercel.app/download
+Hosted APK: https://web-sabziwalaa5.vercel.app/downloads/sabjiwala.apk
 
 ## iOS (Capacitor)
 

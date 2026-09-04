@@ -27,7 +27,7 @@ import { createPaymentClaims, readClaims, signClaims } from "../lib/payments";
 import { canAccessPortal, normalizeRole, portalPathForRole, roleFromEmail } from "../lib/roles";
 import { INITIAL_SETTINGS, pointsEarnedForOrder, rupeesFromPoints } from "../lib/platformSettings";
 import { getAdminWebHref, MOBILE_APP_PATH } from "../lib/config";
-import { MOBILE_ROLES, isMobileRoleId, roleById } from "../lib/mobileApp";
+import { MOBILE_ROLES, isMobileRoleId, roleById, ANDROID_APK_PATH, MOBILE_DOWNLOAD_PATH } from "../lib/mobileApp";
 import { isSupabaseConfigured } from "../lib/supabaseConfig";
 
 let totalTests = 0;
@@ -208,6 +208,8 @@ assert(MOBILE_ROLES.map((r) => r.id).join(",") === "customer,admin,vendor,rider"
 assert(roleById("admin")?.href === "/admin", "Admin role opens the admin web portal from the app");
 assert(isMobileRoleId("rider") === true, "Rider is a valid mobile role");
 assert(isMobileRoleId("hacker") === false, "Unknown roles are rejected");
+assert(ANDROID_APK_PATH === "/downloads/sabjiwala.apk", "Android APK is hosted on the site");
+assert(MOBILE_DOWNLOAD_PATH === "/download", "Download page is /download");
 
 console.log("\n--- Testing Auth Host Configuration ---");
 assert(isSupabaseConfigured("https://placeholder-project.supabase.co") === false, "Placeholder Supabase host is rejected");

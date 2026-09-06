@@ -5,6 +5,7 @@
  */
 
 const required = [
+  "DATABASE_URL",
   "STAFF_BOOTSTRAP_PASSWORD",
   "STAFF_SESSION_SECRET",
   "PAYMENT_HMAC_SECRET",
@@ -18,6 +19,7 @@ function missing(name) {
 
 const issues = [];
 
+if (missing("DATABASE_URL")) issues.push("DATABASE_URL");
 if (missing("STAFF_BOOTSTRAP_PASSWORD")) issues.push("STAFF_BOOTSTRAP_PASSWORD");
 if (missing("STAFF_SESSION_SECRET") && missing("PAYMENT_HMAC_SECRET")) {
   issues.push("STAFF_SESSION_SECRET (or PAYMENT_HMAC_SECRET)");

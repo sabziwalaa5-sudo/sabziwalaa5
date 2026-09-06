@@ -1,0 +1,169 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Vendor {
+  id         String    @id
+  vendorName String
+  shopName   String
+  mobile     String
+  email      String    @unique
+  address    String
+  status     String    @default("Active")
+  latitude   Decimal   @db.Decimal(9, 6)
+  longitude  Decimal   @db.Decimal(9, 6)
+  products   Product[]
+  orders     Order[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([status])
+}
+
+model Product {
+  id           String      @id
+  vendorId     String
+  name         String
+  hindiName    String?
+  price        Decimal     @db.Decimal(10, 2)
+  oldPrice     Decimal?    @db.Decimal(10, 2)
+  unit         String
+  image        String?
+  imageUrl     String?
+  category     String
+  stock        Decimal     @default(0) @db.Decimal(10, 2)
+  rating       Decimal?    @db.Decimal(3, 2)
+  reviewsCount Int         @default(0)
+  badge        String?
+  isSeasonal   Boolean     @default(false)
+  isFarmFresh  Boolean     @default(false)
+  isActive     Boolean     @default(true)
+  vendor       Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([category])
+  @@index([vendorId])
+  @@index([isActive])
+}
+
+model Cart {
+  id         String     @id @default(uuid()) @db.Uuid
+  userId     String?    @unique
+  guestToken String?    @unique
+  items      CartItem[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([guestToken])
+  @@index([userId])
+}
+
+model CartItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  cartId    String  @db.Uuid
+  productId String
+  quantity  Int
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+  @@index([cartId])
+}
+
+model Order {
+  id                String      @id
+  customerId        String?
+  customerEmail     String?
+  customerName      String?
+  customerMobile    String?
+  vendorId          String?
+  orderStatus       String      @default("Pending")
+  paymentStatus     String      @default("Pending")
+  paymentMethod     String
+  subtotal          Decimal     @db.Decimal(10, 2)
+  deliveryCharge    Decimal     @db.Decimal(10, 2)
+  discount          Decimal     @db.Decimal(10, 2)
+  totalAmount       Decimal     @db.Decimal(10, 2)
+  deliveryAddress   String
+  latitude          Decimal?    @db.Decimal(9, 6)
+  longitude         Decimal?    @db.Decimal(9, 6)
+  paymentId         String?
+  razorpayOrderId   String?
+  razorpayPaymentId String?     @unique
+  checkoutToken     String?
+  idempotencyKey    String?     @unique
+  vendor            Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  items             OrderItem[]
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([customerId])
+  @@index([customerEmail])
+  @@index([vendorId])
+  @@index([createdAt])
+  @@index([paymentStatus])
+}
+
+model OrderItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  orderId     String
+  productId   String?
+  productName String
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  subtotal    Decimal  @db.Decimal(10, 2)
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+}
+
+model PlatformSettings {
+  id                    Int     @id @default(1)
+  maintenanceMode       Boolean @default(false)
+  minOrderThreshold     Decimal @default(100) @db.Decimal(10, 2)
+  freeDeliveryThreshold Decimal @default(200) @db.Decimal(10, 2)
+  deliveryCharge        Decimal @default(30) @db.Decimal(10, 2)
+  rewardEnabled         Boolean @default(true)
+  rewardEarningRate     Decimal @default(5) @db.Decimal(10, 2)
+  rewardPointValue      Decimal @default(1) @db.Decimal(10, 2)
+}
+
+model Coupon {
+  id           String   @id
+  code         String   @unique
+  discountType String   @default("fixed")
+  discount     Decimal  @db.Decimal(10, 2)
+  minOrder     Decimal  @default(0) @db.Decimal(10, 2)
+  maxDiscount  Decimal? @db.Decimal(10, 2)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model PaymentCapture {
+  providerPaymentId String   @id
+  orderId           String?
+  amountPaise       Int
+  createdAt         DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model Wallet {
+  id               String   @id @default(uuid()) @db.Uuid
+  customerEmail    String   @unique
+  pointsBalance    Decimal  @default(0) @db.Decimal(10, 2)
+  lifetimeEarned   Decimal  @default(0) @db.Decimal(10, 2)
+  lifetimeRedeemed Decimal  @default(0) @db.Decimal(10, 2)
+  history          Json     @default("[]")
+  updatedAt        DateTime @updatedAt
+}

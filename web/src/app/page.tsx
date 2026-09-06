@@ -45,19 +45,9 @@ import { type AppRole, portalPathForRole } from "../lib/roles";
 import { resolveUserRole } from "../lib/resolveRole";
 import { getAdminWebHref } from "../lib/config";
 import { getPlatformSettings, pointsEarnedForOrder, rupeesFromPoints, type PlatformSettings } from "../lib/platformSettings";
-import {
-  STATE_KEYS,
-  getStoredState,
-  setStoredState,
-  INITIAL_VENDORS,
-  INITIAL_PRODUCTS,
-  INITIAL_ORDERS,
-  INITIAL_WALLETS,
-  INITIAL_COUPONS,
-  INITIAL_CAMPAIGNS,
-  INITIAL_CATEGORIES,
-  INITIAL_REVIEWS
-} from "../lib/sharedState";
+import { INITIAL_CATEGORIES, INITIAL_REVIEWS } from "../lib/sharedState";
+import { useSabjiwalaStore } from "../hooks/useSabjiwalaStore";
+import { createOrderOnServer, setCartItemOnServer, clearCartOnServer } from "../lib/storeApi";
 
 export default function Home() {
   // Navigation & View Subtab
@@ -90,18 +80,27 @@ export default function Home() {
 
   // Delivery Zone Engine States
   const [deliveryCharge, setDeliveryCharge] = useState<number>(30);
-  const [platformSettings, setPlatformSettingsState] = useState<PlatformSettings>(() => getPlatformSettings());
-  const [minOrderValue, setMinOrderValue] = useState<number>(getPlatformSettings().minOrderThreshold);
+  const {
+    loading: storeLoading,
+    productsList,
+    setProductsList,
+    vendorsList,
+    ordersList,
+    setOrdersList,
+    wallets,
+    setWallets,
+    availableCoupons,
+    platformSettings,
+    setPlatformSettingsState,
+    cart,
+    setCart,
+    reload: reloadStore,
+    reloadWallet,
+  } = useSabjiwalaStore();
+  const [bonusCampaigns] = useState([{ id: "bc1", name: "Welcome Bonus Campaign", points: 50, active: true }]);
+  const [minOrderValue, setMinOrderValue] = useState<number>(100);
   const [estimatedDeliveryTime, setEstimatedDeliveryTime] = useState<number>(30);
   const [expressAvailable, setExpressAvailable] = useState<boolean>(true);
-
-  // Synchronized States from localStorage
-  const [vendorsList, setVendorsList] = useState(() => getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-  const [productsList, setProductsList] = useState(() => getStoredState(STATE_KEYS.PRODUCTS, INITIAL_PRODUCTS));
-  const [ordersList, setOrdersList] = useState(() => getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
-  const [wallets, setWallets] = useState(() => getStoredState(STATE_KEYS.WALLETS, INITIAL_WALLETS));
-  const [availableCoupons, setAvailableCoupons] = useState(() => getStoredState(STATE_KEYS.COUPONS, INITIAL_COUPONS));
-  const [bonusCampaigns, setBonusCampaigns] = useState(() => getStoredState(STATE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS));
 
   // Address list management
   const [addresses, setAddresses] = useState<any[]>([
@@ -112,7 +111,6 @@ export default function Home() {
   const [newAddressText, setNewAddressText] = useState("");
 
   // Cart & Orders
-  const [cart, setCart] = useState<{ [key: string]: number }>({});
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [paymentMode, setPaymentMode] = useState<"cod" | "upi" | "card">("cod");
@@ -162,28 +160,19 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Listen to cross-tab localStorage sync
   useEffect(() => {
-    const handleSync = () => {
-      setVendorsList(getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-      setProductsList(getStoredState(STATE_KEYS.PRODUCTS, INITIAL_PRODUCTS));
-      setOrdersList(getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
-      setWallets(getStoredState(STATE_KEYS.WALLETS, INITIAL_WALLETS));
-      setAvailableCoupons(getStoredState(STATE_KEYS.COUPONS, INITIAL_COUPONS));
-      setBonusCampaigns(getStoredState(STATE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS));
-      const settings = getPlatformSettings();
-      setPlatformSettingsState(settings);
-      setMinOrderValue(settings.minOrderThreshold);
-    };
+    setMinOrderValue(platformSettings.minOrderThreshold);
+    if ((platformSettings as { deliveryCharge?: number }).deliveryCharge != null) {
+      setDeliveryCharge((platformSettings as { deliveryCharge?: number }).deliveryCharge || 30);
+    }
+  }, [platformSettings]);
 
-    window.addEventListener("sabjiwala_state_update", handleSync);
-    window.addEventListener("storage", handleSync);
-    handleSync();
-    return () => {
-      window.removeEventListener("sabjiwala_state_update", handleSync);
-      window.removeEventListener("storage", handleSync);
-    };
-  }, []);
+  useEffect(() => {
+    if (userEmail) {
+      reloadWallet(userEmail);
+      reloadStore();
+    }
+  }, [userEmail, reloadWallet, reloadStore]);
 
   // Google Sign-In helper
   const handleGoogleSignIn = async () => {
@@ -316,34 +305,34 @@ export default function Home() {
   };
 
   // Cart operations
-  const addToCart = (productId: string) => {
+  const addToCart = async (productId: string) => {
     const product = productsList.find((p) => p.id === productId);
     if (!product) return;
     if ((product.stock || 0) <= 0) {
       alert("This product is currently unavailable.");
       return;
     }
-    setCart((prev) => {
-      const nextQty = nextCartQuantity(prev[productId] || 0, 1, product.stock);
-      if (nextQty <= 0) return prev;
-      if (nextQty === (prev[productId] || 0)) {
-        alert(`Only ${product.stock} units available.`);
-        return prev;
-      }
-      return { ...prev, [productId]: nextQty };
-    });
+    const nextQty = nextCartQuantity(cart[productId] || 0, 1, product.stock);
+    if (nextQty <= 0 || nextQty === (cart[productId] || 0)) {
+      alert(`Only ${product.stock} units available.`);
+      return;
+    }
+    try {
+      const items = await setCartItemOnServer(productId, nextQty);
+      setCart(items);
+    } catch (err: any) {
+      alert(err.message || "Unable to update cart");
+    }
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => {
-      const next = { ...prev };
-      if (next[productId] > 1) {
-        next[productId] -= 1;
-      } else {
-        delete next[productId];
-      }
-      return next;
-    });
+  const removeFromCart = async (productId: string) => {
+    const nextQty = (cart[productId] || 0) > 1 ? (cart[productId] || 0) - 1 : 0;
+    try {
+      const items = await setCartItemOnServer(productId, nextQty);
+      setCart(items);
+    } catch (err: any) {
+      alert(err.message || "Unable to update cart");
+    }
   };
 
   const getCartTotal = () => {
@@ -441,57 +430,17 @@ export default function Home() {
     }
 
     const wallet = wallets[userEmail] || { pointsBalance: 0, lifetimeEarned: 0, lifetimeRedeemed: 0, history: [] };
-    const safeRedeem = Math.max(0, Math.min(rupeesFromPoints(redeemedPointsInput || 0, platformSettings), wallet.pointsBalance, getCartTotal()));
-    const subtotal = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
-    const couponDiscount = getCouponDiscount();
-    const bill = computeBill({
-      subtotal,
-      couponDiscount,
-      redeemedPoints: safeRedeem,
-      deliveryCharge,
-      freeDeliveryThreshold: platformSettings.freeDeliveryThreshold,
-    });
-
-    if (subtotal < minOrderValue) {
-      setCheckoutError(`Minimum order value is ₹${minOrderValue}.`);
-      return;
-    }
-
+    const safeRedeem = Math.max(0, Math.min(redeemedPointsInput || 0, wallet.pointsBalance));
     const defaultAddress = addresses.find((a) => a.isDefault)?.address || locationName;
     const customerMobile = String(addresses.find((a) => a.isDefault)?.phone || "").replace(/\D/g, "").slice(-10);
-    const orderDraftId = `SBJ${Date.now().toString().slice(-8)}`;
-    const fingerprint = orderFingerprint({
+    const idempotencyKey = orderFingerprint({
       email: userEmail,
       items: cartItems,
-      totalAmount: bill.totalAmount,
+      totalAmount: getCartTotal(),
     });
-    if (fingerprint === lastOrderFingerprint.current && Date.now() - lastOrderAt.current < 60000) {
+
+    if (idempotencyKey === lastOrderFingerprint.current && Date.now() - lastOrderAt.current < 60000) {
       setCheckoutError("Duplicate order blocked. Please wait a minute before retrying the same cart.");
-      return;
-    }
-
-    const orderPayload = {
-      id: orderDraftId,
-      date: new Date().toLocaleString("en-IN"),
-      customerName: userEmail.split("@")[0],
-      customerEmail: userEmail,
-      customerMobile: customerMobile || "0000000000",
-      deliveryAddress: defaultAddress,
-      paymentMethod: displayPaymentMethod(paymentMode),
-      paymentStatus: paymentMode === "cod" ? "Pending" : "Pending",
-      orderStatus: "Pending",
-      items: cartItems,
-      subtotal,
-      deliveryCharges: bill.deliveryCharges,
-      discount: bill.discount,
-      totalAmount: bill.totalAmount,
-      vendorId: vendorsList[0]?.vendor_id || "v1",
-      paymentId: "",
-    };
-
-    const valResult = validateOrder(orderPayload);
-    if (!valResult.valid) {
-      setCheckoutError(`Order validation failed: ${valResult.errors.join(", ")}`);
       return;
     }
 
@@ -499,30 +448,39 @@ export default function Home() {
     setCheckoutError("");
 
     try {
-      let paymentStatus = "Pending";
-      let paymentId = "";
+      const order = await createOrderOnServer({
+        lines: cartItems.map((item) => ({ productId: item.productId, quantity: item.qty })),
+        customerMobile: customerMobile || "0000000000",
+        deliveryAddress: defaultAddress,
+        paymentMethod: displayPaymentMethod(paymentMode),
+        couponCode: appliedCoupon?.code,
+        redeemedPoints: rupeesFromPoints(redeemedPointsInput || 0, platformSettings),
+        idempotencyKey,
+        latitude: customerCoords.lat,
+        longitude: customerCoords.lng,
+      });
+
+      let paymentStatus = order.paymentStatus;
+      let paymentId = order.paymentId || "";
 
       if (paymentMode === "cod") {
-        try {
-          const created = await createPaymentOnServer({
-            orderDraftId,
-            amountRupees: bill.totalAmount,
-            method: "cod",
-          });
-          const verified = await verifyPaymentOnServer({
-            paymentId: created.paymentId,
-            checkoutToken: created.checkoutToken,
-            outcome: "success",
-          });
-          paymentId = verified.paymentId;
-          paymentStatus = "Pending";
-        } catch {
-          paymentStatus = "Pending";
-        }
+        const created = await createPaymentOnServer({
+          orderDraftId: order.id,
+          amountRupees: order.totalAmount,
+          method: "cod",
+        });
+        const verified = await verifyPaymentOnServer({
+          paymentId: created.paymentId,
+          checkoutToken: created.checkoutToken,
+          outcome: "success",
+          orderId: order.id,
+        });
+        paymentId = verified.paymentId;
+        paymentStatus = "Pending";
       } else {
         const created = await createPaymentOnServer({
-          orderDraftId,
-          amountRupees: bill.totalAmount,
+          orderDraftId: order.id,
+          amountRupees: order.totalAmount,
           method: paymentMode,
         });
         if (!created.gatewayConfigured || !created.razorpayKeyId) {
@@ -542,7 +500,7 @@ export default function Home() {
               amount: created.amountPaise,
               currency: "INR",
               name: "Sabjiwala",
-              description: `Order ${orderDraftId}`,
+              description: `Order ${order.id}`,
               order_id: created.razorpayOrderId,
               handler: async (response: any) => {
                 try {
@@ -553,6 +511,7 @@ export default function Home() {
                     razorpay_payment_id: response.razorpay_payment_id,
                     razorpay_signature: response.razorpay_signature,
                     outcome: "success",
+                    orderId: order.id,
                   });
                   if (result.status !== "PAID") {
                     reject(new Error("Payment was not verified by the server"));
@@ -569,6 +528,7 @@ export default function Home() {
                     paymentId: created.paymentId,
                     checkoutToken: created.checkoutToken,
                     outcome: "cancelled",
+                    orderId: order.id,
                   }).catch(() => undefined);
                   reject(new Error("Payment cancelled"));
                 },
@@ -579,6 +539,7 @@ export default function Home() {
                 paymentId: created.paymentId,
                 checkoutToken: created.checkoutToken,
                 outcome: "failure",
+                orderId: order.id,
               }).catch(() => undefined);
               reject(new Error("Payment failed"));
             });
@@ -608,62 +569,26 @@ export default function Home() {
         }
       }
 
-      orderPayload.paymentStatus = paymentStatus;
-      orderPayload.paymentId = paymentId;
-
-      const updatedOrders = [orderPayload, ...ordersList];
-      setOrdersList(updatedOrders);
-      setStoredState(STATE_KEYS.ORDERS, updatedOrders);
-      setActiveOrder(orderPayload);
-      lastOrderFingerprint.current = fingerprint;
-      lastOrderAt.current = Date.now();
-
-      const pointsEarned = pointsEarnedForOrder(bill.totalAmount, platformSettings);
-      const newBalance = wallet.pointsBalance - safeRedeem + pointsEarned;
-      const updatedWallet = {
-        ...wallet,
-        pointsBalance: newBalance,
-        lifetimeEarned: wallet.lifetimeEarned + pointsEarned,
-        lifetimeRedeemed: wallet.lifetimeRedeemed + safeRedeem,
-        history: [
-          ...wallet.history,
-          ...(safeRedeem > 0 ? [{ id: `tx_${Date.now()}_r`, type: "REDEEMED", points: safeRedeem, orderId: orderPayload.id, date: orderPayload.date, balance: wallet.pointsBalance - safeRedeem }] : []),
-          { id: `tx_${Date.now()}_e`, type: "EARNED", points: pointsEarned, orderId: orderPayload.id, date: orderPayload.date, balance: newBalance }
-        ]
+      const orderPayload = {
+        ...order,
+        paymentStatus,
+        paymentId,
+        deliveryCharges: order.deliveryCharges,
       };
 
-      const updatedWallets = { ...wallets, [userEmail]: updatedWallet };
-      setWallets(updatedWallets);
-      setStoredState(STATE_KEYS.WALLETS, updatedWallets);
+      setOrdersList((prev) => [orderPayload, ...prev.filter((o) => o.id !== order.id)]);
+      setActiveOrder(orderPayload);
+      lastOrderFingerprint.current = idempotencyKey;
+      lastOrderAt.current = Date.now();
 
-      const stockUpdated = productsList.map((product) => {
-        const purchased = cartItems.find((item) => item.productId === product.id);
-        if (!purchased) return product;
-        return { ...product, stock: Math.max(0, (product.stock || 0) - purchased.qty) };
-      });
-      setProductsList(stockUpdated);
-      setStoredState(STATE_KEYS.PRODUCTS, stockUpdated);
-
+      await reloadWallet(userEmail);
+      await reloadStore();
+      await clearCartOnServer();
       setCart({});
       setCartOpen(false);
       setAppliedCoupon(null);
       setRedeemedPointsInput(0);
       setCustomerSubTab("orders");
-
-      try {
-        await supabase.from("orders").insert([
-          {
-            id: orderPayload.id,
-            customer_email: orderPayload.customerEmail,
-            total_amount: orderPayload.totalAmount,
-            order_status: orderPayload.orderStatus,
-            payment_status: orderPayload.paymentStatus,
-            created_at: new Date().toISOString()
-          }
-        ]);
-      } catch {
-        logger.debug("Supabase order insert skipped; continuing in local mode.");
-      }
     } catch (err: any) {
       setCheckoutError(err.message || "Checkout failed. Your card/UPI was not charged as paid.");
     } finally {

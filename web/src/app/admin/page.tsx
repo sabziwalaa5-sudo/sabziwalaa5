@@ -4,9 +4,18 @@
 import React, { useState, useEffect } from "react";
 import { supabase, startGoogleOAuth } from "../../lib/supabase";
 import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Settings, Gift, FileText, ShoppingBag, Store, Users, Tag, AlertTriangle, Truck } from "lucide-react";
-import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_WALLETS, INITIAL_COUPONS, INITIAL_CAMPAIGNS } from "../../lib/sharedState";
+import { INITIAL_CAMPAIGNS } from "../../lib/catalogSeed";
+import { useSabjiwalaStore } from "../../hooks/useSabjiwalaStore";
+import {
+  saveProduct,
+  removeProduct,
+  saveVendor,
+  saveCoupon,
+  saveSettings,
+  updateOrderStatusOnServer,
+} from "../../lib/storeApi";
 import { resolveUserRole } from "../../lib/resolveRole";
-import { getPlatformSettings, setPlatformSettings, INITIAL_SETTINGS } from "../../lib/platformSettings";
+import { INITIAL_SETTINGS } from "../../lib/platformSettings";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
 import { logger } from "../../lib/logger";
@@ -28,13 +37,21 @@ export default function AdminPortal() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
-  // Shared States from localStorage
-  const [vendorsList, setVendorsList] = useState(() => getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-  const [productsList, setProductsList] = useState(() => getStoredState(STATE_KEYS.PRODUCTS, INITIAL_PRODUCTS));
-  const [ordersList, setOrdersList] = useState(() => getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
-  const [wallets, setWallets] = useState(() => getStoredState(STATE_KEYS.WALLETS, INITIAL_WALLETS));
-  const [availableCoupons, setAvailableCoupons] = useState(() => getStoredState(STATE_KEYS.COUPONS, INITIAL_COUPONS));
-  const [bonusCampaigns, setBonusCampaigns] = useState(() => getStoredState(STATE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS));
+  const {
+    productsList,
+    setProductsList,
+    vendorsList,
+    setVendorsList,
+    ordersList,
+    setOrdersList,
+    wallets,
+    availableCoupons,
+    setAvailableCoupons,
+    bonusCampaigns,
+    platformSettings,
+    reload,
+  } = useSabjiwalaStore({ staff: true, includeWallets: true });
+  const [localCampaigns, setLocalCampaigns] = useState(bonusCampaigns);
 
   // Edit / Add product states
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
@@ -84,23 +101,10 @@ export default function AdminPortal() {
 
   useEffect(() => {
     setMounted(true);
-    const syncState = () => {
-      setVendorsList(getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-      setProductsList(getStoredState(STATE_KEYS.PRODUCTS, INITIAL_PRODUCTS));
-      setOrdersList(getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
-      setWallets(getStoredState(STATE_KEYS.WALLETS, INITIAL_WALLETS));
-      setAvailableCoupons(getStoredState(STATE_KEYS.COUPONS, INITIAL_COUPONS));
-      setBonusCampaigns(getStoredState(STATE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS));
-      const settings = getPlatformSettings();
-      setRewardSettings(settings.rewardSettings);
-      setMaintenanceMode(settings.maintenanceMode);
-      setMinOrderThreshold(settings.minOrderThreshold);
-      setFreeDeliveryThreshold(settings.freeDeliveryThreshold);
-    };
-
-    window.addEventListener("sabjiwala_state_update", syncState);
-    window.addEventListener("storage", syncState);
-    syncState();
+    setRewardSettings(platformSettings.rewardSettings);
+    setMaintenanceMode(platformSettings.maintenanceMode);
+    setMinOrderThreshold(platformSettings.minOrderThreshold);
+    setFreeDeliveryThreshold(platformSettings.freeDeliveryThreshold);
 
     fetchStaffSession().then((session) => {
       if (session && canAccessPortal(session.role, "admin")) {
@@ -122,13 +126,11 @@ export default function AdminPortal() {
     });
 
     return () => {
-      window.removeEventListener("sabjiwala_state_update", syncState);
-      window.removeEventListener("storage", syncState);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [platformSettings]);
 
-  const persistPlatformSettings = (next: Partial<{
+  const persistPlatformSettings = async (next: Partial<{
     maintenanceMode: boolean;
     minOrderThreshold: number;
     freeDeliveryThreshold: number;
@@ -140,8 +142,16 @@ export default function AdminPortal() {
       freeDeliveryThreshold: next.freeDeliveryThreshold ?? freeDeliveryThreshold,
       rewardSettings: next.rewardSettings ?? rewardSettings,
     };
-    setPlatformSettings(merged);
+    await saveSettings({
+      maintenanceMode: merged.maintenanceMode,
+      minOrderThreshold: merged.minOrderThreshold,
+      freeDeliveryThreshold: merged.freeDeliveryThreshold,
+      rewardEnabled: merged.rewardSettings.enabled,
+      rewardEarningRate: merged.rewardSettings.earningRate,
+      rewardPointValue: merged.rewardSettings.pointValue,
+    });
     setSettingsSavedAt(new Date().toLocaleTimeString("en-IN"));
+    await reload();
   };
 
   const verifySessionRole = async (user: any) => {
@@ -211,23 +221,23 @@ export default function AdminPortal() {
   };
 
   // Vendor actions
-  const handleSaveVendor = (e: React.FormEvent) => {
+  const handleSaveVendor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingVendor) {
-      const updated = vendorsList.map(v => v.vendor_id === editingVendor.vendor_id ? {
-        ...v,
+      const saved = await saveVendor({
+        vendor_id: editingVendor.vendor_id,
         vendor_name: vendorForm.vendor_name,
         shop_name: vendorForm.shop_name,
         mobile: vendorForm.mobile,
         email: vendorForm.email,
         address: vendorForm.address,
-        status: vendorForm.status
-      } : v);
-      setVendorsList(updated);
-      setStoredState(STATE_KEYS.VENDORS, updated);
+        status: vendorForm.status,
+        lat: editingVendor.lat,
+        lng: editingVendor.lng,
+      });
+      setVendorsList((prev) => prev.map((v) => (v.vendor_id === saved.vendor_id ? saved : v)));
     } else {
-      const newVendor = {
-        vendor_id: `v_${Date.now()}`,
+      const saved = await saveVendor({
         vendor_name: vendorForm.vendor_name,
         shop_name: vendorForm.shop_name,
         mobile: vendorForm.mobile,
@@ -235,43 +245,36 @@ export default function AdminPortal() {
         address: vendorForm.address,
         status: vendorForm.status,
         lat: 28.5305,
-        lng: 77.1048
-      };
-      const updated = [...vendorsList, newVendor];
-      setVendorsList(updated);
-      setStoredState(STATE_KEYS.VENDORS, updated);
+        lng: 77.1048,
+      });
+      setVendorsList((prev) => [...prev, saved]);
     }
     setVendorFormOpen(false);
     setEditingVendor(null);
   };
 
-  const toggleVendorStatus = (vendorId: string) => {
-    const updated = vendorsList.map(v => {
-      if (v.vendor_id === vendorId) {
-        return { ...v, status: v.status === "Active" ? "Inactive" : "Active" };
-      }
-      return v;
-    });
-    setVendorsList(updated);
-    setStoredState(STATE_KEYS.VENDORS, updated);
+  const toggleVendorStatus = async (vendorId: string) => {
+    const vendor = vendorsList.find((v) => v.vendor_id === vendorId);
+    if (!vendor) return;
+    const nextStatus = vendor.status === "Active" ? "Inactive" : "Active";
+    const saved = await saveVendor({ ...vendor, status: nextStatus });
+    setVendorsList((prev) => prev.map((v) => (v.vendor_id === vendorId ? saved : v)));
   };
 
-  // Order actions
-  const handleUpdateOrderStatus = (orderId: string, status: string) => {
-    const updated = ordersList.map(o => o.id === orderId ? { ...o, orderStatus: status } : o);
-    setOrdersList(updated);
-    setStoredState(STATE_KEYS.ORDERS, updated);
+  const handleUpdateOrderStatus = async (orderId: string, status: string) => {
+    const updated = await updateOrderStatusOnServer(orderId, status);
+    setOrdersList((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
     if (selectedOrderDetails && selectedOrderDetails.id === orderId) {
-      setSelectedOrderDetails(prev => prev ? { ...prev, orderStatus: status } : null);
+      setSelectedOrderDetails(updated);
     }
   };
 
-  // Product actions
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingProduct) {
-      const updated = productsList.map(p => p.id === editingProduct.id ? {
-        ...p,
+      const saved = await saveProduct({
+        id: editingProduct.id,
+        vendorId: productForm.vendorId,
         name: productForm.name,
         hindiName: productForm.hindiName,
         price: productForm.price,
@@ -279,76 +282,58 @@ export default function AdminPortal() {
         image: productForm.image,
         category: productForm.category,
         stock: productForm.stock,
-        vendorId: productForm.vendorId
-      } : p);
-      setProductsList(updated);
-      setStoredState(STATE_KEYS.PRODUCTS, updated);
+      });
+      setProductsList((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
     } else {
-      const newProduct = {
-        id: `p_${Date.now()}`,
+      const saved = await saveProduct({
+        vendorId: productForm.vendorId || vendorsList[0]?.vendor_id,
         name: productForm.name,
         hindiName: productForm.hindiName,
         price: productForm.price,
         oldPrice: Math.round(productForm.price * 1.25),
         unit: productForm.unit,
         image: productForm.image,
-        imageUrl: "",
         category: productForm.category,
         stock: productForm.stock,
-        rating: 5.0,
-        reviewsCount: 1,
-        vendorId: productForm.vendorId || vendorsList[0]?.vendor_id,
-        badge: null as string | null,
-        isSeasonal: false,
-        isFarmFresh: true
-      };
-
-      const updated = [...productsList, newProduct];
-      setProductsList(updated);
-      setStoredState(STATE_KEYS.PRODUCTS, updated);
+        isFarmFresh: true,
+      });
+      setProductsList((prev) => [...prev, saved]);
     }
     setProductFormOpen(false);
     setEditingProduct(null);
   };
 
-  const handleDeleteProduct = (id: string) => {
+  const handleDeleteProduct = async (id: string) => {
     if (confirm("Delete product?")) {
-      const updated = productsList.filter(p => p.id !== id);
-      setProductsList(updated);
-      setStoredState(STATE_KEYS.PRODUCTS, updated);
+      await removeProduct(id);
+      setProductsList((prev) => prev.filter((p) => p.id !== id));
     }
   };
 
   // Coupon actions
-  const handleSaveCoupon = (e: React.FormEvent) => {
+  const handleSaveCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newCoupon = {
+    const saved = await saveCoupon({
       code: couponForm.code.toUpperCase(),
       discountType: couponForm.discountType,
       discountValue: couponForm.discountValue,
       minOrder: couponForm.minOrder,
-      maxDiscount: couponForm.maxDiscount
-    };
-    const updated = [...availableCoupons, newCoupon];
-    setAvailableCoupons(updated);
-    setStoredState(STATE_KEYS.COUPONS, updated);
+      maxDiscount: couponForm.maxDiscount,
+    });
+    setAvailableCoupons((prev) => [...prev.filter((c) => c.code !== saved.code), saved]);
     setCouponFormOpen(false);
     setCouponForm({ code: "", discountType: "percentage", discountValue: 10, minOrder: 100, maxDiscount: 50 });
   };
 
-  const handleDeleteCoupon = (code: string) => {
+  const handleDeleteCoupon = async (code: string) => {
     if (confirm("Delete coupon?")) {
-      const updated = availableCoupons.filter(c => c.code !== code);
-      setAvailableCoupons(updated);
-      setStoredState(STATE_KEYS.COUPONS, updated);
+      setAvailableCoupons((prev) => prev.filter((c) => c.code !== code));
+      await reload();
     }
   };
 
-  // Campaigns
   const toggleCampaignStatus = (id: string) => {
-    const updated = bonusCampaigns.map(c => c.id === id ? { ...c, active: !c.active } : c);
-    setBonusCampaigns(updated);
-    setStoredState(STATE_KEYS.CAMPAIGNS, updated);
+    setLocalCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, active: !c.active } : c)));
   };
 
   // Export CSV
@@ -875,7 +860,7 @@ export default function AdminPortal() {
                       </tr>
                     </thead>
                     <tbody>
-                      {bonusCampaigns.map(c => (
+                      {localCampaigns.map(c => (
                         <tr key={c.id} style={{ borderBottom: "1px solid var(--border)", fontSize: "0.85rem" }}>
                           <td style={{ padding: "1rem" }}><strong>{c.name}</strong></td>
                           <td style={{ padding: "1rem", color: "var(--accent)", fontWeight: "bold" }}>+{c.points} points</td>

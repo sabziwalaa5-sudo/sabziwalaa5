@@ -1,4 +1,4 @@
-import { getStoredState, setStoredState, STATE_KEYS } from "./sharedState";
+import { getApiBaseUrl } from "./config";
 
 export type RewardSettings = {
   enabled: boolean;
@@ -24,20 +24,33 @@ export const INITIAL_SETTINGS: PlatformSettings = {
   },
 };
 
+let cachedSettings: PlatformSettings | null = null;
+
 export function getPlatformSettings(): PlatformSettings {
-  const stored = getStoredState<Partial<PlatformSettings>>(STATE_KEYS.SETTINGS, INITIAL_SETTINGS);
-  return {
-    ...INITIAL_SETTINGS,
-    ...stored,
-    rewardSettings: {
-      ...INITIAL_SETTINGS.rewardSettings,
-      ...(stored.rewardSettings || {}),
-    },
-  };
+  return cachedSettings || INITIAL_SETTINGS;
+}
+
+export async function loadPlatformSettings(): Promise<PlatformSettings> {
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/settings`, { credentials: "include" });
+    if (!res.ok) return INITIAL_SETTINGS;
+    const data = await res.json();
+    cachedSettings = {
+      ...INITIAL_SETTINGS,
+      ...data.settings,
+      rewardSettings: {
+        ...INITIAL_SETTINGS.rewardSettings,
+        ...(data.settings?.rewardSettings || {}),
+      },
+    };
+    return cachedSettings;
+  } catch {
+    return INITIAL_SETTINGS;
+  }
 }
 
 export function setPlatformSettings(settings: PlatformSettings): void {
-  setStoredState(STATE_KEYS.SETTINGS, settings);
+  cachedSettings = settings;
 }
 
 export function pointsEarnedForOrder(totalAmount: number, settings: PlatformSettings = getPlatformSettings()): number {

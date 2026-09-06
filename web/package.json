@@ -4,11 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start -p 3001",
     "type-check": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "npx tsx src/tests/test_flows.ts",
+    "test": "npx tsx src/tests/test_flows.ts && npx tsx src/tests/test_store_api.ts",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
     "check:production-env": "node scripts/check-production-env.mjs",
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap open android",
@@ -29,6 +32,7 @@
     "@supabase/supabase-js": "^2.39.8",
     "lucide-react": "^0.468.0",
     "next": "^16.2.10",
+    "@prisma/client": "^6.5.0",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
@@ -37,7 +41,11 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "prisma": "^6.5.0",
     "tsx": "^4.23.12",
     "typescript": "^5"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

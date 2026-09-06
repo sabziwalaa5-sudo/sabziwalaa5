@@ -34,6 +34,7 @@
     "node_modules",
     "android",
     "ios",
-    "native-www"
+    "native-www",
+    "capacitor.config.ts"
   ]
 }

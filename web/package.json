@@ -2,10 +2,14 @@
   "name": "sabjiwala-web",
   "version": "1.0.0",
   "private": true,
+  "main": "server.cjs",
+  "engines": {
+    "node": ">=20 <=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "start": "next start -p 3001",
+    "start": "node scripts/start-production.mjs",
     "type-check": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "npx tsx src/tests/test_flows.ts && npx tsx src/tests/test_store_api.ts && npx tsx src/tests/test_production_signoff.ts",
@@ -13,6 +17,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "check:production-env": "node scripts/check-production-env.mjs",
+    "validate:godaddy": "node scripts/validate-godaddy.mjs",
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap open android",
     "cap:ios": "npx cap open ios",
@@ -33,17 +38,17 @@
     "lucide-react": "^0.468.0",
     "next": "^16.2.10",
     "@prisma/client": "^6.5.0",
+    "prisma": "^6.5.0",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
-  },
-  "devDependencies": {
-    "@capacitor/cli": "^6.2.1",
+    "react-dom": "19.0.0",
+    "tsx": "^4.23.12",
+    "typescript": "^5",
     "@types/node": "^20",
     "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "prisma": "^6.5.0",
-    "tsx": "^4.23.12",
-    "typescript": "^5"
+    "@types/react-dom": "^19"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.1"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -1,3 +1,5 @@
+import { BrandLogo } from "./BrandLogo";
+
 export default function AppLoadingShell({ label }: { label: string }) {
   return (
     <div
@@ -14,10 +16,9 @@ export default function AppLoadingShell({ label }: { label: string }) {
       }}
     >
       <div>
-        <div style={{ fontSize: 48 }} aria-hidden>
-          🥬
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+          <BrandLogo height={80} priority />
         </div>
-        <h1 style={{ margin: "8px 0 4px", fontSize: "1.4rem", fontWeight: 900 }}>SABJIWALAA ५</h1>
         <p style={{ margin: 0, color: "#6b7280", fontSize: 14 }}>{label}</p>
       </div>
     </div>

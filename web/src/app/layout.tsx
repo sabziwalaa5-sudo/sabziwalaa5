@@ -12,6 +12,7 @@ export const metadata: Metadata = {
     description: "Hyperlocal organic grocery marketplace",
     type: "website",
     locale: "en_IN",
+    images: [{ url: "/images/logo.png", width: 1024, height: 558, alt: "SABZIWALAA ५ — Freshly Delivered" }],
   },
   robots: {
     index: true,

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ANDROID_APK_PATH } from "../../lib/mobileApp";
+import { BrandLogo } from "../../components/BrandLogo";
 
 export const metadata: Metadata = {
   title: "Sabjiwala Android app download",
@@ -18,10 +19,10 @@ export default function DownloadAppPage() {
     >
       <div style={{ maxWidth: 440, margin: "0 auto" }}>
         <header style={{ color: "white", textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 52 }} aria-hidden>
-            🥬
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+            <BrandLogo height={88} priority style={{ filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.15))" }} />
           </div>
-          <h1 style={{ margin: "8px 0 6px", fontSize: "1.7rem", fontWeight: 900 }}>Sabjiwala Android App</h1>
+          <h1 style={{ margin: "8px 0 6px", fontSize: "1.2rem", fontWeight: 800 }}>Sabjiwala Android App</h1>
           <p style={{ margin: 0, opacity: 0.92, fontSize: 15 }}>Phone pe install karke dukaan, admin, vendor, rider kholo.</p>
         </header>
 

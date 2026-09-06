@@ -9,6 +9,7 @@ import { saveProduct, removeProduct, updateOrderStatusOnServer } from "../../lib
 import { resolveUserRole } from "../../lib/resolveRole";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
+import { BrandLogo } from "../../components/BrandLogo";
 import { logger } from "../../lib/logger";
 import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
 import { canAccessPortal } from "../../lib/roles";
@@ -232,9 +233,11 @@ export default function VendorPortal() {
         <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", padding: "2rem" }}>
           <div className="card" style={{ maxWidth: "450px", width: "100%", padding: "2.5rem", borderRadius: "16px", backgroundColor: "white", boxShadow: "0 10px 30px rgba(0,0,0,0.08)" }}>
             <div style={{ textAlign: "center", marginBlockEnd: "2rem" }}>
-              <span style={{ fontSize: "3rem" }}>🏪</span>
-              <h2 style={{ fontWeight: "900", fontSize: "1.6rem", marginBlockStart: "0.5rem" }}>SABJIWALAA ५</h2>
-              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Merchant / Vendor Partner Terminal</p>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.75rem" }}>
+                <BrandLogo height={72} />
+              </div>
+              <span style={{ fontSize: "2rem" }}>🏪</span>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginBlockStart: "0.5rem" }}>Merchant / Vendor Partner Terminal</p>
             </div>
 
             {authError && (

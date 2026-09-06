@@ -6,6 +6,18 @@ import OpsBanner from "../components/OpsBanner";
 export const metadata: Metadata = {
   title: "SABJIWALAA ५ - Hyperlocal Organic Grocery Marketplace",
   description: "Next-gen hyperlocal vegetable and grocery marketplace with sub-minute routing and real-time live order tracking.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://web-sabziwalaa5.vercel.app"),
+  openGraph: {
+    title: "SABJIWALAA ५",
+    description: "Hyperlocal organic grocery marketplace",
+    type: "website",
+    locale: "en_IN",
+    images: [{ url: "/images/logo.png", width: 1024, height: 558, alt: "SABZIWALAA ५ — Freshly Delivered" }],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
   appleWebApp: {
     capable: true,
     title: "Sabjiwala",

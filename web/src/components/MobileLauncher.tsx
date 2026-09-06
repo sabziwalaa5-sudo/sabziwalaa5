@@ -9,6 +9,7 @@ import {
   roleById,
   type MobileRoleId,
 } from "../lib/mobileApp";
+import { BrandLogo } from "./BrandLogo";
 
 export default function MobileLauncher() {
   const [lastRole, setLastRole] = useState<MobileRoleId | null>(null);
@@ -41,10 +42,9 @@ export default function MobileLauncher() {
     >
       <div style={{ maxWidth: 420, margin: "0 auto" }}>
         <header style={{ color: "white", textAlign: "center", marginBottom: 28 }}>
-          <div style={{ fontSize: 52 }} aria-hidden>
-            🥬
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+            <BrandLogo height={88} priority style={{ filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.15))" }} />
           </div>
-          <h1 style={{ margin: "8px 0 4px", fontSize: "1.7rem", fontWeight: 900, letterSpacing: "-0.03em" }}>SABJIWALAA ५</h1>
           <p style={{ margin: 0, opacity: 0.9, fontSize: 14 }}>Mobile app · linked storefront, admin, vendor, and rider</p>
           {native ? (
             <p style={{ margin: "8px 0 0", fontSize: 12, opacity: 0.8 }}>Running in the Sabjiwala Android / iOS app</p>

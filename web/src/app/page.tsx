@@ -40,6 +40,7 @@ import {
 import ProfileDashboard from "../components/ProfileDashboard";
 import PortalNav, { StaffLoginLinks } from "../components/PortalNav";
 import AppLoadingShell from "../components/AppLoadingShell";
+import { BrandLogo } from "../components/BrandLogo";
 import { type AppRole, portalPathForRole } from "../lib/roles";
 import { resolveUserRole } from "../lib/resolveRole";
 import { getAdminWebHref } from "../lib/config";
@@ -697,16 +698,8 @@ export default function Home() {
       <header className="desktop-header">
         <div className="desktop-header-inner">
           {/* Brand Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", flexShrink: 0 }} onClick={() => handleNavClick("catalog")}>
-            <div style={{ width: "42px", height: "42px", borderRadius: "12px", background: "var(--accent)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", fontWeight: 800, boxShadow: "var(--shadow-green)" }}>
-              🥬
-            </div>
-            <div>
-              <h1 style={{ fontSize: "1.2rem", fontWeight: 900, letterSpacing: "-0.5px", margin: 0, color: "var(--accent)", lineHeight: 1.1 }}>
-                SABJIWALAA ५
-              </h1>
-              <span className="t-label" style={{ fontSize: "10px", color: "var(--text-3)", letterSpacing: "0.5px" }}>Organic Hyperlocal Market</span>
-            </div>
+          <div style={{ display: "flex", alignItems: "center", cursor: "pointer", flexShrink: 0 }} onClick={() => handleNavClick("catalog")}>
+            <BrandLogo height={48} priority />
           </div>
 
           {/* Location Trigger Pill */}
@@ -771,12 +764,8 @@ export default function Home() {
 
       {/* ═══════ 2. MOBILE TOP APP BAR ═══════ */}
       <header className="mobile-app-bar">
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }} onClick={() => handleNavClick("catalog")}>
-          <span style={{ fontSize: "1.8rem" }}>🥬</span>
-          <div>
-            <span style={{ fontSize: "16px", fontWeight: 900, color: "var(--accent)", lineHeight: 1 }}>SABJIWALAA ५</span>
-            <span style={{ display: "block", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--text-3)", fontWeight: 700 }}>Farm Fresh Organic</span>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", cursor: "pointer" }} onClick={() => handleNavClick("catalog")}>
+          <BrandLogo height={36} priority />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div style={{ position: "relative", cursor: "pointer" }} onClick={() => setNotificationBellOpen(!notificationBellOpen)}>
@@ -1470,8 +1459,10 @@ export default function Home() {
       {showLoginModal && (
         <div className="modal-overlay" onClick={() => setShowLoginModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <span style={{ fontSize: "3.2rem", display: "block", marginBottom: "16px" }}>🥬</span>
-            <h3 style={{ fontWeight: 900, fontSize: "24px", color: "var(--text)" }}>Welcome to SABJIWALAA ५</h3>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
+              <BrandLogo height={72} />
+            </div>
+            <h3 style={{ fontWeight: 900, fontSize: "24px", color: "var(--text)" }}>Welcome</h3>
             <p style={{ color: "var(--text-3)", margin: "8px 0 24px", fontSize: "14px", lineHeight: 1.5 }}>
               Sign in to access <strong>{loginRequiredFor || "your account"}</strong>, earn rewards, and track deliveries.
             </p>

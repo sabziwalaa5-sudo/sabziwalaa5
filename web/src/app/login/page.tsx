@@ -1,11 +1,15 @@
 "use client";
 
 import { STAFF_PORTALS } from "../../lib/roles";
+import { BrandLogo } from "../../components/BrandLogo";
 
 export default function LoginPage() {
   return (
     <main style={{ minHeight: "100vh", background: "#f8faf8", padding: "2rem 1rem" }}>
       <div style={{ maxWidth: 520, margin: "0 auto", textAlign: "center" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+          <BrandLogo height={72} />
+        </div>
         <h1 style={{ fontSize: "1.6rem", fontWeight: 900 }}>Staff login</h1>
         <p style={{ color: "#64748b" }}>Customer shop is on the homepage. Staff use these portals.</p>
         <p style={{ fontSize: 13, background: "#ecfdf5", padding: 12, borderRadius: 12 }}>

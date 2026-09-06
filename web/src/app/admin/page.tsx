@@ -9,6 +9,7 @@ import { resolveUserRole } from "../../lib/resolveRole";
 import { getPlatformSettings, setPlatformSettings, INITIAL_SETTINGS } from "../../lib/platformSettings";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
+import { BrandLogo } from "../../components/BrandLogo";
 import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
 import { canAccessPortal } from "../../lib/roles";
 import { INITIAL_RIDERS } from "../../lib/sharedState";
@@ -393,9 +394,11 @@ export default function AdminPortal() {
         <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", padding: "2rem" }}>
           <div className="card" style={{ maxWidth: "450px", width: "100%", padding: "2.5rem", borderRadius: "16px", backgroundColor: "white", boxShadow: "0 10px 30px rgba(0,0,0,0.08)" }}>
             <div style={{ textAlign: "center", marginBlockEnd: "2rem" }}>
-              <span style={{ fontSize: "3rem" }}>🛡️</span>
-              <h2 style={{ fontWeight: "900", fontSize: "1.6rem", marginBlockStart: "0.5rem" }}>SABJIWALAA ५</h2>
-              <p data-testid="admin-gate" style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Administrator Terminal Gate</p>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.75rem" }}>
+                <BrandLogo height={72} />
+              </div>
+              <span style={{ fontSize: "2rem" }}>🛡️</span>
+              <p data-testid="admin-gate" style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginBlockStart: "0.5rem" }}>Administrator Terminal Gate</p>
             </div>
 
             {authError && (

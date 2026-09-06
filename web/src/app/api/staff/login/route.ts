@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeStaffLogin, signStaffSession, STAFF_COOKIE, type StaffSession } from "../../../../lib/staffAuth";
 import type { StaffPortal } from "../../../../lib/roles";
+import { checkServerRateLimit, clientIp } from "../../../../lib/serverRateLimit";
 
 function cookieOptions() {
   return {
@@ -13,6 +14,15 @@ function cookieOptions() {
 }
 
 export async function POST(request: NextRequest) {
+  const ip = clientIp(request);
+  const limit = checkServerRateLimit(`staff-login:${ip}`, 10, 5 * 60 * 1000);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many login attempts. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) } }
+    );
+  }
+
   const body = (await request.json().catch(() => ({}))) as {
     email?: string;
     password?: string;

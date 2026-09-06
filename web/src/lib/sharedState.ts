@@ -1,5 +1,7 @@
 "use client";
 
+import { logger } from "./logger";
+
 // Shared state keys for localStorage
 export const STATE_KEYS = {
   PRODUCTS: "sabjiwala_products_list",
@@ -333,7 +335,7 @@ export function getStoredState<T>(key: string, defaultValue: T): T {
     const raw = window.localStorage.getItem(key);
     return raw ? JSON.parse(raw) : defaultValue;
   } catch (e) {
-    console.error("Error reading localStorage key:", key, e);
+    logger.error(`Error reading localStorage key: ${String(key)}`, e);
     return defaultValue;
   }
 }
@@ -345,6 +347,6 @@ export function setStoredState<T>(key: string, value: T): void {
     // Trigger custom event to sync state across components in the same tab
     window.dispatchEvent(new Event("sabjiwala_state_update"));
   } catch (e) {
-    console.error("Error writing localStorage key:", key, e);
+    logger.error(`Error writing localStorage key: ${String(key)}`, e);
   }
 }

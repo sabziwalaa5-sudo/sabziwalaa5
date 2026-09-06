@@ -9,6 +9,7 @@ import { resolveUserRole } from "../../lib/resolveRole";
 import { getPlatformSettings, setPlatformSettings, INITIAL_SETTINGS } from "../../lib/platformSettings";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
+import { logger } from "../../lib/logger";
 import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
 import { canAccessPortal } from "../../lib/roles";
 import { INITIAL_RIDERS } from "../../lib/sharedState";
@@ -201,7 +202,7 @@ export default function AdminPortal() {
       await logoutStaffPortal();
       await supabase.auth.signOut();
     } catch (e) {
-      console.error(e);
+      logger.error("Admin auth error", e);
     } finally {
       setUserEmail(null);
       setUserRole(null);
@@ -429,7 +430,7 @@ export default function AdminPortal() {
                   style={{ padding: "0.6rem 1rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.9rem" }}
                 />
                 <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0.35rem 0 0" }}>
-                  Live staff PIN (change with STAFF_BOOTSTRAP_PASSWORD): <strong>Sabjiwala5!</strong>
+                  Staff PIN is configured with the STAFF_BOOTSTRAP_PASSWORD environment variable.
                 </p>
               </div>
 

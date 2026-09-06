@@ -9,6 +9,7 @@
     "type-check": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "npx tsx src/tests/test_flows.ts",
+    "check:production-env": "node scripts/check-production-env.mjs",
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap open android",
     "cap:ios": "npx cap open ios",

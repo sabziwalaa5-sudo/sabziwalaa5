@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { attachRazorpayOrder, createPaymentClaims, razorpayKeysConfigured, signClaims } from "../../../../lib/payments";
+import { checkServerRateLimit, clientIp } from "../../../../lib/serverRateLimit";
 
 export async function POST(req: NextRequest) {
   try {
+    const limit = checkServerRateLimit(`payments-create:${clientIp(req)}`, 20, 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many payment requests." }, { status: 429 });
+    }
+
     const body = await req.json();
     const amountRupees = Number(body.amountRupees);
     const method = body.method as "COD" | "UPI" | "CARD";

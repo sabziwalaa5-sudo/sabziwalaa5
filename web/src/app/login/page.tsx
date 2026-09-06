@@ -1,17 +1,21 @@
 "use client";
 
-import { STAFF_PORTALS } from "../../lib/roles";
+import { STAFF_PORTALS, staffLoginHint } from "../../lib/roles";
 
 export default function LoginPage() {
+  const devMode = process.env.NODE_ENV === "development";
+
   return (
     <main style={{ minHeight: "100vh", background: "#f8faf8", padding: "2rem 1rem" }}>
       <div style={{ maxWidth: 520, margin: "0 auto", textAlign: "center" }}>
         <h1 style={{ fontSize: "1.6rem", fontWeight: 900 }}>Staff login</h1>
         <p style={{ color: "#64748b" }}>Customer shop is on the homepage. Staff use these portals.</p>
         <p style={{ fontSize: 13, background: "#ecfdf5", padding: 12, borderRadius: 12 }}>
-          PIN for all staff: <strong>Sabjiwala5!</strong>
+          {devMode
+            ? "Development: use the staff emails configured in STAFF_*_EMAILS and STAFF_BOOTSTRAP_PASSWORD."
+            : "Sign in with your assigned staff email and the PIN configured for this deployment."}
           <br />
-          Admin <code>sabziwalaa5@gmail.com</code> · Vendor <code>raman@gmail.com</code> · Rider <code>rider@gmail.com</code>
+          {staffLoginHint()}
         </p>
         <div style={{ display: "grid", gap: 12, marginTop: 20 }}>
           {STAFF_PORTALS.map((portal) => (

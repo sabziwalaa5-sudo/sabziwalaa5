@@ -213,9 +213,11 @@ assert(ANDROID_APK_PATH === "/downloads/sabjiwala.apk", "Android APK is hosted o
 assert(MOBILE_DOWNLOAD_PATH === "/download", "Download page is /download");
 
 console.log("\n--- Testing Auth Host Configuration ---");
+process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_test_key";
+assert(isSupabaseConfigured("https://example-project.supabase.co") === true, "Valid Supabase host with key is accepted");
 assert(isSupabaseConfigured("https://placeholder-project.supabase.co") === false, "Placeholder Supabase host is rejected");
-assert(isSupabaseConfigured("https://qbcchkhjbrijrqubzvtk.supabase.co") === true, "Restored Sabjiwala Supabase host is accepted");
 assert(isSupabaseConfigured("not-a-url") === false, "Invalid URL is rejected");
+delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 console.log("\n--- Testing Staff Portal Bootstrap ---");
 const adminOk = authorizeStaffLogin({ email: "sabziwalaa5@gmail.com", password: DEFAULT_STAFF_BOOTSTRAP_PASSWORD, portal: "admin" });

@@ -69,9 +69,7 @@ npm run build
 
 https://web-sabziwalaa5.vercel.app/login
 
-PIN `Sabjiwala5!` — Admin `sabziwalaa5@gmail.com` · Vendor `raman@gmail.com` · Rider `rider@gmail.com`
-
-Details: `docs/production.md`
+Configure `STAFF_BOOTSTRAP_PASSWORD`, `STAFF_SESSION_SECRET`, and optional `STAFF_*_EMAILS` in your hosting environment. See `docs/production.md` and `docs/production-checklist.md`.
 
 ## Docs
 

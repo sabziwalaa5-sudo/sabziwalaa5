@@ -7,6 +7,7 @@ import { validateOrder, validateCouponCode, validateEmail } from "../lib/validat
 import { RateLimits } from "../lib/rateLimiter";
 import { buildCartItems, computeBill, nextCartQuantity, orderFingerprint } from "../lib/orderEngine";
 import { createPaymentOnServer, displayPaymentMethod, verifyPaymentOnServer } from "../lib/paymentClient";
+import { logger } from "../lib/logger";
 import {
   ShoppingBag,
   MapPin,
@@ -661,7 +662,7 @@ export default function Home() {
           }
         ]);
       } catch {
-        console.log("Supabase insert skipped (running in local mode).");
+        logger.debug("Supabase order insert skipped; continuing in local mode.");
       }
     } catch (err: any) {
       setCheckoutError(err.message || "Checkout failed. Your card/UPI was not charged as paid.");

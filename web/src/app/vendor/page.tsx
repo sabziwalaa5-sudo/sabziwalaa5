@@ -8,6 +8,7 @@ import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PR
 import { resolveUserRole } from "../../lib/resolveRole";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
+import { logger } from "../../lib/logger";
 import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
 import { canAccessPortal } from "../../lib/roles";
 
@@ -127,7 +128,7 @@ export default function VendorPortal() {
       await logoutStaffPortal();
       await supabase.auth.signOut();
     } catch (e) {
-      console.error(e);
+      logger.error("Vendor auth error", e);
     } finally {
       setUserEmail(null);
       setUserRole(null);
@@ -297,7 +298,7 @@ export default function VendorPortal() {
                   style={{ padding: "0.6rem 1rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.9rem" }}
                 />
                 <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0.35rem 0 0" }}>
-                  Use <strong>raman@gmail.com</strong> and PIN <strong>Sabjiwala5!</strong>
+                  Use your assigned vendor email and staff PIN.
                 </p>
               </div>
 

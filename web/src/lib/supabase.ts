@@ -1,9 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { isNativeRuntime } from "./platform";
 import {
   SUPABASE_UNAVAILABLE_MESSAGE,
   getSupabaseAnonKey,
   getSupabaseUrl,
+  isSupabaseConfigured,
   isSupabaseReachable,
 } from "./supabaseConfig";
 
@@ -15,7 +16,18 @@ export {
   requireSupabaseAuth,
 } from "./supabaseConfig";
 
-export const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey());
+function createSupabaseClient(): SupabaseClient {
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  if (!isSupabaseConfigured(url)) {
+    return createClient("https://placeholder.invalid", "placeholder-anon-key", {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+  return createClient(url, key);
+}
+
+export const supabase = createSupabaseClient();
 
 /** Google OAuth without replacing the app WebView when DNS fails. */
 export async function startGoogleOAuth(redirectTo: string): Promise<{ error?: string }> {

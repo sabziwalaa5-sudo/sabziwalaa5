@@ -5,9 +5,15 @@ import {
   readClaims,
   verifyRazorpaySignature,
 } from "../../../../lib/payments";
+import { checkServerRateLimit, clientIp } from "../../../../lib/serverRateLimit";
 
 export async function POST(req: NextRequest) {
   try {
+    const limit = checkServerRateLimit(`payments-verify:${clientIp(req)}`, 30, 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many verification requests." }, { status: 429 });
+    }
+
     const body = await req.json();
     const checkoutToken = String(body.checkoutToken || "");
     const outcome = body.outcome as "success" | "failure" | "cancelled" | undefined;

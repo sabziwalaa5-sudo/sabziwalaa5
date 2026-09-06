@@ -27,32 +27,95 @@ model Vendor {
 }
 
 model Product {
-  id           String      @id
+  id           String           @id
   vendorId     String
   name         String
   hindiName    String?
-  price        Decimal     @db.Decimal(10, 2)
-  oldPrice     Decimal?    @db.Decimal(10, 2)
+  price        Decimal          @db.Decimal(10, 2)
+  oldPrice     Decimal?         @db.Decimal(10, 2)
   unit         String
   image        String?
   imageUrl     String?
+  imageStoragePath String?
   category     String
-  stock        Decimal     @default(0) @db.Decimal(10, 2)
-  rating       Decimal?    @db.Decimal(3, 2)
-  reviewsCount Int         @default(0)
+  categoryId   String?
+  stock        Decimal          @default(0) @db.Decimal(10, 2)
+  rating       Decimal?         @db.Decimal(3, 2)
+  reviewsCount Int              @default(0)
   badge        String?
-  isSeasonal   Boolean     @default(false)
-  isFarmFresh  Boolean     @default(false)
-  isActive     Boolean     @default(true)
-  vendor       Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  isSeasonal   Boolean          @default(false)
+  isFarmFresh  Boolean          @default(false)
+  isActive     Boolean          @default(true)
+  vendor       Vendor           @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  productCategory ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   cartItems    CartItem[]
   orderItems   OrderItem[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  sectionLinks SectionProduct[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   @@index([category])
+  @@index([categoryId])
   @@index([vendorId])
   @@index([isActive])
+  @@index([createdAt])
+}
+
+model ProductCategory {
+  id           String              @id @default(cuid())
+  name         String
+  slug         String              @unique
+  description  String?
+  imageUrl     String?
+  icon         String?
+  isActive     Boolean             @default(true)
+  displayOrder Int                 @default(0)
+  products     Product[]
+  sections     StorefrontSection[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([isActive, displayOrder])
+}
+
+enum StorefrontSectionType {
+  CATEGORY
+  MANUAL
+  BEST_SELLERS
+  NEW_ARRIVALS
+  FEATURED
+  DEALS
+}
+
+model StorefrontSection {
+  id           String                @id @default(cuid())
+  name         String
+  slug         String                @unique
+  description  String?
+  sectionType  StorefrontSectionType
+  categoryId   String?
+  category     ProductCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  isActive     Boolean               @default(true)
+  displayOrder Int                   @default(0)
+  maxProducts  Int                   @default(12)
+  products     SectionProduct[]
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([isActive, displayOrder])
+}
+
+model SectionProduct {
+  id           String            @id @default(cuid())
+  sectionId    String
+  productId    String
+  displayOrder Int               @default(0)
+  section      StorefrontSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  product      Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, productId])
+  @@index([sectionId])
+  @@index([productId])
 }
 
 model Cart {

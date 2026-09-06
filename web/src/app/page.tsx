@@ -46,9 +46,9 @@ import { type AppRole, portalPathForRole } from "../lib/roles";
 import { resolveUserRole } from "../lib/resolveRole";
 import { getAdminWebHref } from "../lib/config";
 import { getPlatformSettings, pointsEarnedForOrder, rupeesFromPoints, type PlatformSettings } from "../lib/platformSettings";
-import { INITIAL_CATEGORIES, INITIAL_REVIEWS } from "../lib/sharedState";
+import { INITIAL_REVIEWS } from "../lib/sharedState";
 import { useSabjiwalaStore } from "../hooks/useSabjiwalaStore";
-import { createOrderOnServer, setCartItemOnServer, clearCartOnServer, fetchAddresses, saveAddress, updateAddressOnServer, deleteAddressOnServer } from "../lib/storeApi";
+import { createOrderOnServer, setCartItemOnServer, clearCartOnServer, fetchAddresses, saveAddress, updateAddressOnServer, deleteAddressOnServer, fetchStorefront, fetchCategories, type ClientCategory, type StorefrontSectionPayload } from "../lib/storeApi";
 
 export default function Home() {
   // Navigation & View Subtab
@@ -116,6 +116,8 @@ export default function Home() {
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [dbCategories, setDbCategories] = useState<ClientCategory[]>([]);
+  const [storefrontSections, setStorefrontSections] = useState<StorefrontSectionPayload[]>([]);
   const [wishlist, setWishlist] = useState<{ [id: string]: boolean }>({});
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<any | null>(null);
@@ -150,6 +152,12 @@ export default function Home() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       applySession(session?.user || null);
     });
+
+    fetchCategories(true).then(setDbCategories).catch(() => undefined);
+    fetchStorefront().then((payload) => {
+      setDbCategories(payload.categories);
+      setStorefrontSections(payload.sections);
+    }).catch(() => undefined);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       applySession(session?.user || null);
@@ -624,8 +632,60 @@ export default function Home() {
   });
 
   const bestSellerProducts = liveCatalog.filter((p) => p.badge === "bestseller" || p.rating >= 4.8);
-  const seasonalProducts = liveCatalog.filter((p) => p.isSeasonal);
-  const farmFreshProducts = liveCatalog.filter((p) => p.isFarmFresh);
+
+  const renderProductGrid = (products: typeof liveCatalog) => (
+    <div className="products-grid">
+      {products.map((prod) => {
+        const itemQty = cart[prod.id] || 0;
+        return (
+          <div key={prod.id} className="product-card animate-fade-up">
+            <div className="product-image-wrap" onClick={() => setSelectedProduct(prod)} style={{ cursor: "pointer" }}>
+              <img src={prod.imageUrl || undefined} alt={prod.name} loading="lazy" />
+              {prod.badge && (
+                <span className={`badge ${prod.badge === "organic" ? "badge-organic" : "badge-bestseller"}`} style={{ position: "absolute", top: "10px", left: "10px", zIndex: 2 }}>
+                  {prod.badge === "organic" ? "🌿 Organic" : "🔥 Best Seller"}
+                </span>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); setWishlist((prev) => ({ ...prev, [prod.id]: !prev[prod.id] })); }}
+                style={{ position: "absolute", bottom: "10px", right: "10px", background: "rgba(255,255,255,0.9)", backdropFilter: "blur(4px)", border: "none", borderRadius: "50%", width: "34px", height: "34px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 2 }}
+              >
+                <Heart size={16} fill={wishlist[prod.id] ? "var(--danger)" : "none"} color={wishlist[prod.id] ? "var(--danger)" : "var(--text-3)"} />
+              </button>
+            </div>
+            <div className="product-body">
+              <span className="t-caption" style={{ fontSize: "11px" }}>{prod.unit}</span>
+              <h4 className="t-product" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "38px" }}>
+                {prod.name}
+              </h4>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <Star size={13} fill="#EAB308" color="#EAB308" />
+                <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)" }}>{prod.rating}</span>
+                {prod.reviewsCount ? <span style={{ fontSize: "11px", color: "var(--text-4)" }}>({prod.reviewsCount})</span> : null}
+              </div>
+              <div className="product-qty-row">
+                <div>
+                  <span style={{ fontWeight: 800, fontSize: "16px", color: "var(--text)" }}>₹{prod.price}</span>
+                  {prod.oldPrice && <span style={{ textDecoration: "line-through", fontSize: "12px", color: "var(--text-4)", marginLeft: "4px" }}>₹{prod.oldPrice}</span>}
+                </div>
+                {itemQty > 0 ? (
+                  <div className="qty-stepper">
+                    <button className="qty-btn" onClick={() => removeFromCart(prod.id)}>−</button>
+                    <span className="qty-count">{itemQty}</span>
+                    <button className="qty-btn" onClick={() => addToCart(prod.id)}>+</button>
+                  </div>
+                ) : (
+                  <button className="add-btn" onClick={() => addToCart(prod.id)} disabled={isOutOfRange}>
+                    <Plus size={14} /> Add
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   const totalCartItemsCount = Object.values(cart).reduce((a, b) => a + b, 0);
 
@@ -841,7 +901,11 @@ export default function Home() {
                 </div>
                 <div className="category-rail-container">
                   <div className="category-rail">
-                    {INITIAL_CATEGORIES.map((cat) => (
+                    {[{ id: "All", label: "All Items", imageUrl: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80" }, ...dbCategories.map((cat) => ({
+                      id: cat.name,
+                      label: cat.name,
+                      imageUrl: cat.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80",
+                    }))].map((cat) => (
                       <button
                         key={cat.id}
                         onClick={() => setSelectedCategory(cat.id)}
@@ -857,8 +921,23 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 🌟 BEST SELLERS SECTION 🌟 */}
-              {selectedCategory === "All" && (
+              {selectedCategory === "All" && storefrontSections.map((section, index) => (
+                <div key={section.id} style={{ animation: "fadeUp 0.5s var(--ease) both", animationDelay: `${200 + index * 40}ms` }}>
+                  <div className="section-header">
+                    <div>
+                      {section.sectionType === "BEST_SELLERS" && (
+                        <span className="badge badge-bestseller" style={{ marginBottom: "4px" }}>🔥 Popular Demand</span>
+                      )}
+                      <h3 style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.02em" }}>{section.name}</h3>
+                    </div>
+                    <span className="t-caption">{section.products.length} items</span>
+                  </div>
+                  {renderProductGrid(section.products)}
+                </div>
+              ))}
+
+              {/* Fallback when storefront sections are not configured yet */}
+              {selectedCategory === "All" && storefrontSections.length === 0 && bestSellerProducts.length > 0 && (
                 <div style={{ animation: "fadeUp 0.5s var(--ease) both", animationDelay: "200ms" }}>
                   <div className="section-header">
                     <div>
@@ -867,57 +946,7 @@ export default function Home() {
                     </div>
                     <span className="t-caption">Top rated items</span>
                   </div>
-                  <div className="products-grid">
-                    {bestSellerProducts.map((prod) => {
-                      const itemQty = cart[prod.id] || 0;
-                      return (
-                        <div key={prod.id} className="product-card animate-fade-up">
-                          <div className="product-image-wrap" onClick={() => setSelectedProduct(prod)} style={{ cursor: "pointer" }}>
-                            <img src={prod.imageUrl} alt={prod.name} loading="lazy" />
-                            {prod.badge && (
-                              <span className={`badge ${prod.badge === "organic" ? "badge-organic" : "badge-bestseller"}`} style={{ position: "absolute", top: "10px", left: "10px", zIndex: 2 }}>
-                                {prod.badge === "organic" ? "🌿 Organic" : "🔥 Best Seller"}
-                              </span>
-                            )}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setWishlist((prev) => ({ ...prev, [prod.id]: !prev[prod.id] })); }}
-                              style={{ position: "absolute", bottom: "10px", right: "10px", background: "rgba(255,255,255,0.9)", backdropFilter: "blur(4px)", border: "none", borderRadius: "50%", width: "34px", height: "34px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 2 }}
-                            >
-                              <Heart size={16} fill={wishlist[prod.id] ? "var(--danger)" : "none"} color={wishlist[prod.id] ? "var(--danger)" : "var(--text-3)"} />
-                            </button>
-                          </div>
-                          <div className="product-body">
-                            <span className="t-caption" style={{ fontSize: "11px" }}>{prod.unit}</span>
-                            <h4 className="t-product" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "38px" }}>
-                              {prod.name}
-                            </h4>
-                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                              <Star size={13} fill="#EAB308" color="#EAB308" />
-                              <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)" }}>{prod.rating}</span>
-                              <span style={{ fontSize: "11px", color: "var(--text-4)" }}>({prod.reviewsCount})</span>
-                            </div>
-                            <div className="product-qty-row">
-                              <div>
-                                <span style={{ fontWeight: 800, fontSize: "16px", color: "var(--text)" }}>₹{prod.price}</span>
-                                {prod.oldPrice && <span style={{ textDecoration: "line-through", fontSize: "12px", color: "var(--text-4)", marginLeft: "4px" }}>₹{prod.oldPrice}</span>}
-                              </div>
-                              {itemQty > 0 ? (
-                                <div className="qty-stepper">
-                                  <button className="qty-btn" onClick={() => removeFromCart(prod.id)}>−</button>
-                                  <span className="qty-count">{itemQty}</span>
-                                  <button className="qty-btn" onClick={() => addToCart(prod.id)}>+</button>
-                                </div>
-                              ) : (
-                                <button className="add-btn" onClick={() => addToCart(prod.id)} disabled={isOutOfRange}>
-                                  <Plus size={14} /> Add
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {renderProductGrid(bestSellerProducts)}
                 </div>
               )}
 

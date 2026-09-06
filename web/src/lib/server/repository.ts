@@ -4,6 +4,7 @@ import { prisma } from "../db";
 import { calculateOrderTotals, generateOrderId, settingsToClient } from "./orderMath";
 import { decimalToNumber, toJson } from "./serialize";
 import { ensureDatabaseReady } from "./bootstrap";
+import { resolveCategoryId, setProductManualSections } from "./catalog";
 import { validateAddress, validateCoordinates, validatePhone } from "../validation";
 import { pointsEarnedForOrder } from "../platformSettingsServer";
 
@@ -27,6 +28,7 @@ export type ClientProduct = {
   image?: string | null;
   imageUrl?: string | null;
   category: string;
+  categoryId?: string | null;
   stock: number;
   rating?: number | null;
   reviewsCount: number;
@@ -100,7 +102,9 @@ function serializeProduct(product: {
   unit: string;
   image: string | null;
   imageUrl: string | null;
+  imageStoragePath?: string | null;
   category: string;
+  categoryId: string | null;
   stock: Prisma.Decimal;
   rating: Prisma.Decimal | null;
   reviewsCount: number;
@@ -120,6 +124,7 @@ function serializeProduct(product: {
     image: product.image,
     imageUrl: product.imageUrl,
     category: product.category,
+    categoryId: product.categoryId,
     stock: decimalToNumber(product.stock),
     rating: product.rating ? decimalToNumber(product.rating) : null,
     reviewsCount: product.reviewsCount,
@@ -253,13 +258,17 @@ export async function createProduct(input: {
   unit: string;
   image?: string;
   imageUrl?: string;
+  imageStoragePath?: string;
   category: string;
+  categoryId?: string;
   stock: number;
   badge?: string | null;
   isSeasonal?: boolean;
   isFarmFresh?: boolean;
+  sectionIds?: string[];
 }) {
   await ready();
+  const resolved = await resolveCategoryId(input.categoryId, input.category);
   const product = await prisma.product.create({
     data: {
       id: input.id || `p_${Date.now()}`,
@@ -271,7 +280,9 @@ export async function createProduct(input: {
       unit: input.unit,
       image: input.image,
       imageUrl: input.imageUrl,
-      category: input.category,
+      imageStoragePath: input.imageStoragePath,
+      category: resolved.categoryName,
+      categoryId: resolved.categoryId,
       stock: input.stock,
       badge: input.badge,
       isSeasonal: input.isSeasonal ?? false,
@@ -279,6 +290,9 @@ export async function createProduct(input: {
       isActive: true,
     },
   });
+  if (input.sectionIds?.length) {
+    await setProductManualSections(product.id, input.sectionIds);
+  }
   return serializeProduct(product);
 }
 
@@ -292,17 +306,35 @@ export async function updateProduct(
     unit: string;
     image: string;
     imageUrl: string;
+    imageStoragePath: string | null;
     category: string;
+    categoryId: string | null;
     stock: number;
     badge: string | null;
     isSeasonal: boolean;
     isFarmFresh: boolean;
     isActive: boolean;
     vendorId: string;
+    sectionIds?: string[];
   }>
 ) {
   await ready();
-  const product = await prisma.product.update({ where: { id }, data: input });
+  const { sectionIds, categoryId, category, ...rest } = input;
+  let data: Prisma.ProductUpdateInput = { ...rest };
+  if (categoryId != null || category != null) {
+    const resolved = await resolveCategoryId(categoryId, category);
+    data = {
+      ...data,
+      category: resolved.categoryName,
+      productCategory: resolved.categoryId
+        ? { connect: { id: resolved.categoryId } }
+        : { disconnect: true },
+    };
+  }
+  const product = await prisma.product.update({ where: { id }, data });
+  if (sectionIds) {
+    await setProductManualSections(id, sectionIds);
+  }
   return serializeProduct(product);
 }
 

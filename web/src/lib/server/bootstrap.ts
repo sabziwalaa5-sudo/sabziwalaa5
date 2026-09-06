@@ -153,6 +153,8 @@ export async function seedDemoCatalogIfEnabled(): Promise<void> {
 /** Called by API/repository layers before reads/writes. */
 export async function ensureDatabaseReady(): Promise<void> {
   await ensurePlatformSettings();
+  const { ensureDefaultCatalogStructure } = await import("./catalog");
+  await ensureDefaultCatalogStructure();
   await seedDemoCatalogIfEnabled();
 }
 

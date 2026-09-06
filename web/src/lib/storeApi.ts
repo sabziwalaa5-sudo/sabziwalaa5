@@ -275,3 +275,195 @@ export async function deleteAddressOnServer(id: string): Promise<void> {
   const headers = await authHeaders();
   await fetch(`${base()}/api/addresses/${id}`, { method: "DELETE", headers, credentials: "include" });
 }
+
+export type ClientCategory = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  icon?: string | null;
+  isActive: boolean;
+  displayOrder: number;
+  productCount?: number;
+};
+
+export type ClientSection = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  sectionType: string;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  isActive: boolean;
+  displayOrder: number;
+  maxProducts: number;
+  productIds?: string[];
+};
+
+export type StorefrontSectionPayload = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  sectionType: string;
+  products: ClientProduct[];
+};
+
+export async function fetchCategories(activeOnly = true): Promise<ClientCategory[]> {
+  const res = await fetch(`${base()}/api/categories?activeOnly=${activeOnly}`, { credentials: "include" });
+  const data = await parseJson<{ categories: ClientCategory[] }>(res);
+  return data.categories;
+}
+
+export async function saveCategory(input: Partial<ClientCategory> & { name: string }) {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/categories`, {
+    method: "POST",
+    headers,
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  const data = await parseJson<{ category: ClientCategory }>(res);
+  return data.category;
+}
+
+export async function updateCategory(id: string, input: Partial<ClientCategory>) {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/categories/${id}`, {
+    method: "PATCH",
+    headers,
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  const data = await parseJson<{ category: ClientCategory }>(res);
+  return data.category;
+}
+
+export async function deleteCategory(id: string) {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/categories/${id}`, { method: "DELETE", headers, credentials: "include" });
+  await parseJson(res);
+}
+
+export async function reorderCategories(orderedIds: string[]) {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/categories`, {
+    method: "PATCH",
+    headers,
+    credentials: "include",
+    body: JSON.stringify({ orderedIds }),
+  });
+  const data = await parseJson<{ categories: ClientCategory[] }>(res);
+  return data.categories;
+}
+
+export async function fetchSections(activeOnly = false, includeProducts = false): Promise<ClientSection[]> {
+  const res = await fetch(
+    `${base()}/api/sections?activeOnly=${activeOnly}&includeProducts=${includeProducts}`,
+    { credentials: "include" }
+  );
+  const data = await parseJson<{ sections: ClientSection[] }>(res);
+  return data.sections;
+}
+
+export async function saveSection(input: {
+  name: string;
+  slug?: string;
+  description?: string;
+  sectionType: string;
+  categoryId?: string;
+  maxProducts?: number;
+  isActive?: boolean;
+}) {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/sections`, {
+    method: "POST",
+    headers,
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  const data = await parseJson<{ section: ClientSection }>(res);
+  return data.section;
+}
+
+export async function updateSection(id: string, input: Partial<ClientSection> & { sectionType?: string; categoryId?: string }) {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/sections/${id}`, {
+    method: "PATCH",
+    headers,
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  const data = await parseJson<{ section: ClientSection }>(res);
+  return data.section;
+}
+
+export async function deleteSection(id: string) {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/sections/${id}`, { method: "DELETE", headers, credentials: "include" });
+  await parseJson(res);
+}
+
+export async function reorderSections(orderedIds: string[]) {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/sections`, {
+    method: "PATCH",
+    headers,
+    credentials: "include",
+    body: JSON.stringify({ orderedIds }),
+  });
+  const data = await parseJson<{ sections: ClientSection[] }>(res);
+  return data.sections;
+}
+
+export async function assignProductToSection(sectionId: string, productId: string) {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/sections/${sectionId}/products`, {
+    method: "POST",
+    headers,
+    credentials: "include",
+    body: JSON.stringify({ productId }),
+  });
+  await parseJson(res);
+}
+
+export async function removeProductFromSection(sectionId: string, productId: string) {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/sections/${sectionId}/products/${productId}`, {
+    method: "DELETE",
+    headers,
+    credentials: "include",
+  });
+  await parseJson(res);
+}
+
+export async function fetchStorefront(): Promise<{ categories: ClientCategory[]; sections: StorefrontSectionPayload[] }> {
+  const res = await fetch(`${base()}/api/storefront`, { credentials: "include" });
+  return parseJson(res);
+}
+
+export async function uploadProductImage(productId: string, file: File) {
+  const headers = await authHeaders();
+  const form = new FormData();
+  form.append("file", file);
+  const authOnly = { Authorization: headers.Authorization || "" };
+  const res = await fetch(`${base()}/api/products/${productId}/image`, {
+    method: "POST",
+    headers: authOnly.Authorization ? authOnly : undefined,
+    credentials: "include",
+    body: form,
+  });
+  return parseJson<{ product: ClientProduct; imageUrl: string }>(res);
+}
+
+export async function deleteProductImage(productId: string) {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/products/${productId}/image`, {
+    method: "DELETE",
+    headers,
+    credentials: "include",
+  });
+  return parseJson<{ product: ClientProduct }>(res);
+}

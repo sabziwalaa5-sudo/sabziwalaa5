@@ -22,11 +22,13 @@ export const POST = withApiHandler(async (request: NextRequest) => {
     unit: String(body.unit || "1 kg"),
     image: body.image ? String(body.image) : undefined,
     imageUrl: body.imageUrl ? String(body.imageUrl) : undefined,
-    category: String(body.category || "Vegetables"),
+    category: body.category ? String(body.category) : "",
+    categoryId: body.categoryId ? String(body.categoryId) : undefined,
     stock: Number(body.stock ?? 0),
     badge: body.badge ?? null,
     isSeasonal: Boolean(body.isSeasonal),
     isFarmFresh: Boolean(body.isFarmFresh),
+    sectionIds: Array.isArray(body.sectionIds) ? body.sectionIds.map(String) : undefined,
   });
   return jsonOk({ product }, { status: 201 });
 });

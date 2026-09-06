@@ -33,12 +33,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       ...(body.image != null ? { image: String(body.image) } : {}),
       ...(body.imageUrl != null ? { imageUrl: String(body.imageUrl) } : {}),
       ...(body.category != null ? { category: String(body.category) } : {}),
+      ...(body.categoryId !== undefined ? { categoryId: body.categoryId ? String(body.categoryId) : null } : {}),
       ...(body.stock != null ? { stock: Number(body.stock) } : {}),
       ...(body.badge !== undefined ? { badge: body.badge } : {}),
       ...(body.isSeasonal != null ? { isSeasonal: Boolean(body.isSeasonal) } : {}),
       ...(body.isFarmFresh != null ? { isFarmFresh: Boolean(body.isFarmFresh) } : {}),
       ...(body.isActive != null ? { isActive: Boolean(body.isActive) } : {}),
       ...(body.vendorId != null ? { vendorId: String(body.vendorId) } : {}),
+      ...(body.imageStoragePath !== undefined ? { imageStoragePath: body.imageStoragePath } : {}),
+      ...(Array.isArray(body.sectionIds) ? { sectionIds: body.sectionIds.map(String) } : {}),
     });
     return NextResponse.json({ product });
   } catch (error) {

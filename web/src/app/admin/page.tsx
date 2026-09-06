@@ -13,12 +13,19 @@ import {
   saveCoupon,
   saveSettings,
   updateOrderStatusOnServer,
+  fetchCategories,
+  fetchSections,
+  type ClientCategory,
+  type ClientSection,
 } from "../../lib/storeApi";
 import { resolveUserRole } from "../../lib/resolveRole";
 import { INITIAL_SETTINGS } from "../../lib/platformSettings";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
 import { BrandLogo } from "../../components/BrandLogo";
+import CategoryManager from "../../components/admin/CategoryManager";
+import SectionManager from "../../components/admin/SectionManager";
+import ProductImageUpload from "../../components/admin/ProductImageUpload";
 import { logger } from "../../lib/logger";
 import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
 import { canAccessPortal } from "../../lib/roles";
@@ -26,7 +33,9 @@ import { INITIAL_RIDERS } from "../../lib/sharedState";
 
 export default function AdminPortal() {
   const [mounted, setMounted] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<"vendors" | "riders" | "customers" | "orders" | "products" | "coupons" | "rewards" | "reports" | "settings">("vendors");
+  const [activeSubTab, setActiveSubTab] = useState<
+    "vendors" | "riders" | "customers" | "orders" | "products" | "categories" | "sections" | "coupons" | "rewards" | "reports" | "settings"
+  >("vendors");
 
   // Auth State
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -64,9 +73,14 @@ export default function AdminPortal() {
     unit: "1 kg",
     image: "🥬",
     category: "Vegetables",
+    categoryId: "",
     stock: 100,
-    vendorId: ""
+    vendorId: "",
+    imageUrl: "",
+    sectionIds: [] as string[],
   });
+  const [categoryList, setCategoryList] = useState<ClientCategory[]>([]);
+  const [manualSections, setManualSections] = useState<ClientSection[]>([]);
 
   // Edit / Add Vendor states
   const [editingVendor, setEditingVendor] = useState<any | null>(null);
@@ -113,6 +127,11 @@ export default function AdminPortal() {
         setUserRole(session.role);
       }
     });
+
+    fetchCategories(false).then(setCategoryList).catch(() => undefined);
+    fetchSections(false, true).then((rows) => {
+      setManualSections(rows.filter((s) => ["MANUAL", "FEATURED", "DEALS"].includes(s.sectionType)));
+    }).catch(() => undefined);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -272,36 +291,34 @@ export default function AdminPortal() {
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    const selectedCategory = categoryList.find((c) => c.id === productForm.categoryId);
+    const payload = {
+      vendorId: productForm.vendorId || vendorsList[0]?.vendor_id,
+      name: productForm.name,
+      hindiName: productForm.hindiName,
+      price: productForm.price,
+      unit: productForm.unit,
+      image: productForm.image,
+      category: selectedCategory?.name || productForm.category,
+      categoryId: productForm.categoryId || undefined,
+      stock: productForm.stock,
+      sectionIds: productForm.sectionIds,
+      imageUrl: productForm.imageUrl || undefined,
+    };
+
     if (editingProduct) {
-      const saved = await saveProduct({
-        id: editingProduct.id,
-        vendorId: productForm.vendorId,
-        name: productForm.name,
-        hindiName: productForm.hindiName,
-        price: productForm.price,
-        unit: productForm.unit,
-        image: productForm.image,
-        category: productForm.category,
-        stock: productForm.stock,
-      });
+      const saved = await saveProduct({ id: editingProduct.id, ...payload });
       setProductsList((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+      setEditingProduct(saved);
     } else {
       const saved = await saveProduct({
-        vendorId: productForm.vendorId || vendorsList[0]?.vendor_id,
-        name: productForm.name,
-        hindiName: productForm.hindiName,
-        price: productForm.price,
+        ...payload,
         oldPrice: Math.round(productForm.price * 1.25),
-        unit: productForm.unit,
-        image: productForm.image,
-        category: productForm.category,
-        stock: productForm.stock,
         isFarmFresh: true,
       });
       setProductsList((prev) => [...prev, saved]);
+      setEditingProduct(saved);
     }
-    setProductFormOpen(false);
-    setEditingProduct(null);
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -489,6 +506,8 @@ export default function AdminPortal() {
               { id: "customers", label: "Customers Profiles", icon: <Users size={15} /> },
               { id: "orders", label: "All Orders", icon: <ShoppingBag size={15} /> },
               { id: "products", label: "Organic Catalog", icon: <Plus size={15} /> },
+              { id: "categories", label: "Categories", icon: <Tag size={15} /> },
+              { id: "sections", label: "Storefront Sections", icon: <FileText size={15} /> },
               { id: "coupons", label: "Coupons", icon: <Tag size={15} /> },
               { id: "rewards", label: "Rewards Ledger", icon: <Gift size={15} /> },
               { id: "reports", label: "System Telemetry", icon: <FileText size={15} /> },
@@ -717,7 +736,20 @@ export default function AdminPortal() {
                   <h3 style={{ fontSize: "1.25rem", fontWeight: "800" }}>Platform Products Catalog</h3>
                   <button onClick={() => {
                     setEditingProduct(null);
-                    setProductForm({ name: "", hindiName: "", price: 0, unit: "1 kg", image: "🥦", category: "Vegetables", stock: 100, vendorId: vendorsList[0]?.vendor_id });
+                    const defaultCategory = categoryList[0];
+                    setProductForm({
+                      name: "",
+                      hindiName: "",
+                      price: 0,
+                      unit: "1 kg",
+                      image: "🥦",
+                      category: defaultCategory?.name || "Vegetables",
+                      categoryId: defaultCategory?.id || "",
+                      stock: 100,
+                      vendorId: vendorsList[0]?.vendor_id || "",
+                      imageUrl: "",
+                      sectionIds: [],
+                    });
                     setProductFormOpen(true);
                   }} className="btn btn-primary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.85rem", borderRadius: "8px" }}><Plus size={16} /> Add Product</button>
                 </div>
@@ -746,9 +778,26 @@ export default function AdminPortal() {
                             <td style={{ padding: "1rem" }}><span className="badge badge-secondary">{vendor ? vendor.shop_name : "General Hub"}</span></td>
                             <td style={{ padding: "1rem" }}>
                               <div style={{ display: "flex", gap: "0.35rem" }}>
-                                <button onClick={() => {
+                                <button onClick={async () => {
+                                  const sections = await fetchSections(false, true);
+                                  const assigned = sections
+                                    .filter((s) => ["MANUAL", "FEATURED", "DEALS"].includes(s.sectionType) && s.productIds?.includes(prod.id))
+                                    .map((s) => s.id);
+                                  const matchedCategory = categoryList.find((c) => c.name === prod.category || c.id === prod.categoryId);
                                   setEditingProduct(prod);
-                                  setProductForm({ name: prod.name, hindiName: prod.hindiName, price: prod.price, unit: prod.unit, image: prod.image, category: prod.category, stock: prod.stock, vendorId: prod.vendorId });
+                                  setProductForm({
+                                    name: prod.name,
+                                    hindiName: prod.hindiName || "",
+                                    price: prod.price,
+                                    unit: prod.unit,
+                                    image: prod.image || "🥬",
+                                    category: matchedCategory?.name || prod.category,
+                                    categoryId: prod.categoryId || matchedCategory?.id || "",
+                                    stock: prod.stock,
+                                    vendorId: prod.vendorId,
+                                    imageUrl: prod.imageUrl || "",
+                                    sectionIds: assigned,
+                                  });
                                   setProductFormOpen(true);
                                 }} className="btn btn-secondary" style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}>Edit</button>
                                 <button onClick={() => handleDeleteProduct(prod.id)} className="btn btn-secondary" style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem", borderColor: "var(--danger)", color: "var(--danger)" }}>Delete</button>
@@ -762,6 +811,10 @@ export default function AdminPortal() {
                 </div>
               </div>
             )}
+
+            {activeSubTab === "categories" && <CategoryManager />}
+
+            {activeSubTab === "sections" && <SectionManager products={productsList} />}
 
             {/* F. COUPONS TAB */}
             {activeSubTab === "coupons" && (
@@ -1118,15 +1171,58 @@ export default function AdminPortal() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
                   <label style={{ fontSize: "0.8rem", fontWeight: "600" }}>Category</label>
                   <select
-                    value={productForm.category}
-                    onChange={(e) => setProductForm(prev => ({ ...prev, category: e.target.value }))}
+                    value={productForm.categoryId}
+                    onChange={(e) => {
+                      const next = categoryList.find((c) => c.id === e.target.value);
+                      setProductForm((prev) => ({
+                        ...prev,
+                        categoryId: e.target.value,
+                        category: next?.name || prev.category,
+                      }));
+                    }}
+                    required
                     style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }}
                   >
-                    <option value="Vegetables">Vegetables</option>
-                    <option value="Fruits">Fruits</option>
+                    <option value="">Select category</option>
+                    {categoryList.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
                   </select>
                 </div>
               </div>
+
+              <ProductImageUpload
+                productId={editingProduct?.id}
+                imageUrl={productForm.imageUrl}
+                onUploaded={(url) => setProductForm((prev) => ({ ...prev, imageUrl: url }))}
+                onRemoved={() => setProductForm((prev) => ({ ...prev, imageUrl: "" }))}
+              />
+
+              {manualSections.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Storefront Sections (manual)</label>
+                  {manualSections.map((section) => (
+                    <label key={section.id} style={{ display: "flex", gap: 8, fontSize: 13, alignItems: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={productForm.sectionIds.includes(section.id)}
+                        onChange={(e) => {
+                          setProductForm((prev) => ({
+                            ...prev,
+                            sectionIds: e.target.checked
+                              ? [...prev.sectionIds, section.id]
+                              : prev.sectionIds.filter((id) => id !== section.id),
+                          }));
+                        }}
+                      />
+                      {section.name} ({section.sectionType})
+                    </label>
+                  ))}
+                  <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0 }}>
+                    Best Sellers and New Arrivals are calculated automatically from sales and creation date.
+                  </p>
+                </div>
+              )}
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>

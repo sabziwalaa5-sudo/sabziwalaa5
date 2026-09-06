@@ -140,7 +140,8 @@ export async function fetchAllOrdersForStaff(): Promise<ClientOrder[]> {
 export async function createOrderOnServer(input: {
   lines: Array<{ productId: string; quantity: number }>;
   customerMobile: string;
-  deliveryAddress: string;
+  deliveryAddress?: string;
+  addressId?: string;
   paymentMethod: string;
   couponCode?: string;
   redeemedPoints?: number;
@@ -217,4 +218,60 @@ export async function refreshStoreData() {
     fetchCoupons(),
   ]);
   return { products, vendors, settings, coupons };
+}
+
+export type ClientAddress = {
+  id: string;
+  tag: string;
+  address: string;
+  phone?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  isDefault: boolean;
+};
+
+export async function fetchAddresses(): Promise<ClientAddress[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/addresses`, { headers, credentials: "include" });
+  const data = await parseJson<{ addresses: ClientAddress[] }>(res);
+  return data.addresses;
+}
+
+export async function saveAddress(input: {
+  tag: string;
+  address: string;
+  phone?: string;
+  lat?: number;
+  lng?: number;
+  isDefault?: boolean;
+}): Promise<ClientAddress> {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/addresses`, {
+    method: "POST",
+    headers,
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  const data = await parseJson<{ address: ClientAddress }>(res);
+  return data.address;
+}
+
+export async function updateAddressOnServer(
+  id: string,
+  input: Partial<{ tag: string; address: string; phone: string; lat: number; lng: number; isDefault: boolean }>
+): Promise<ClientAddress> {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/addresses/${id}`, {
+    method: "PATCH",
+    headers,
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  const data = await parseJson<{ address: ClientAddress }>(res);
+  return data.address;
+}
+
+export async function deleteAddressOnServer(id: string): Promise<void> {
+  const headers = await authHeaders();
+  await fetch(`${base()}/api/addresses/${id}`, { method: "DELETE", headers, credentials: "include" });
 }

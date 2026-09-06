@@ -9,6 +9,7 @@ import {
   newGuestToken,
   setCartItemQuantity,
 } from "../../../lib/server/repository";
+import { checkServerRateLimit, clientIp } from "../../../lib/serverRateLimit";
 
 async function resolveCart(request: NextRequest) {
   const customer = await getCustomerFromRequest(request);
@@ -41,6 +42,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     requireDatabase();
+    const limit = checkServerRateLimit(`cart:${clientIp(request)}`, 60, 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many cart updates." }, { status: 429 });
+    }
+
     const body = await request.json();
     const productId = String(body.productId || "");
     const quantity = Number(body.quantity);

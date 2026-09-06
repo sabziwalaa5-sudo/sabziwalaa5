@@ -3,8 +3,19 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { calculateOrderTotals, generateOrderId, settingsToClient } from "./orderMath";
 import { decimalToNumber, toJson } from "./serialize";
-import { ensureDatabaseSeeded } from "./bootstrap";
+import { ensureDatabaseReady } from "./bootstrap";
+import { validateAddress, validateCoordinates, validatePhone } from "../validation";
 import { pointsEarnedForOrder } from "../platformSettingsServer";
+
+export type ClientAddress = {
+  id: string;
+  tag: string;
+  address: string;
+  phone?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  isDefault: boolean;
+};
 
 export type ClientProduct = {
   id: string;
@@ -211,7 +222,7 @@ function serializeCoupon(coupon: {
 }
 
 async function ready() {
-  await ensureDatabaseSeeded();
+  await ensureDatabaseReady();
 }
 
 export async function listProducts(options?: { activeOnly?: boolean; vendorId?: string }) {
@@ -601,7 +612,8 @@ export async function createOrder(input: {
   customerEmail: string;
   customerName?: string;
   customerMobile: string;
-  deliveryAddress: string;
+  deliveryAddress?: string;
+  addressId?: string;
   latitude?: number;
   longitude?: number;
   paymentMethod: string;
@@ -622,6 +634,38 @@ export async function createOrder(input: {
       return serializeOrder(full);
     }
   }
+
+  let deliveryAddress = input.deliveryAddress || "";
+  let latitude = input.latitude;
+  let longitude = input.longitude;
+  let customerMobile = input.customerMobile;
+  let addressId: string | null = null;
+
+  if (input.addressId && input.customerId) {
+    const addr = await getCustomerAddressForUser(input.addressId, {
+      id: input.customerId,
+      email: input.customerEmail,
+    });
+    deliveryAddress = addr.address;
+    latitude = addr.lat ?? latitude;
+    longitude = addr.lng ?? longitude;
+    if (addr.phone) customerMobile = addr.phone;
+    addressId = addr.id;
+  }
+
+  const addressCheck = validateAddress(deliveryAddress);
+  if (!addressCheck.valid) throw new Error(addressCheck.error || "Invalid delivery address");
+
+  if (latitude != null && longitude != null) {
+    const coordCheck = validateCoordinates(latitude, longitude);
+    if (!coordCheck.valid) throw new Error(coordCheck.error || "Invalid coordinates");
+  }
+
+  const phoneCheck = validatePhone(customerMobile.replace(/\D/g, "").slice(-10) || customerMobile);
+  if (!phoneCheck.valid && customerMobile !== "0000000000") {
+    throw new Error(phoneCheck.error || "Invalid mobile number");
+  }
+  if (phoneCheck.valid) customerMobile = phoneCheck.sanitized;
 
   const settings = await prisma.platformSettings.findUniqueOrThrow({ where: { id: 1 } });
   const productIds = input.lines.map((l) => l.productId);
@@ -674,9 +718,10 @@ export async function createOrder(input: {
         deliveryCharge: calculated.deliveryCharge,
         discount: calculated.discount,
         totalAmount: calculated.totalAmount,
-        deliveryAddress: input.deliveryAddress,
-        latitude: input.latitude,
-        longitude: input.longitude,
+        deliveryAddress: addressCheck.sanitized,
+        latitude,
+        longitude,
+        addressId,
         idempotencyKey: input.idempotencyKey,
         items: {
           create: calculated.items.map((item) => ({
@@ -692,10 +737,13 @@ export async function createOrder(input: {
     });
 
     for (const item of calculated.items) {
-      await tx.product.update({
-        where: { id: item.productId },
+      const updated = await tx.product.updateMany({
+        where: { id: item.productId, isActive: true, stock: { gte: item.quantity } },
         data: { stock: { decrement: item.quantity } },
       });
+      if (updated.count !== 1) {
+        throw new Error(`Insufficient stock for ${item.productName}`);
+      }
     }
 
     return created;
@@ -835,4 +883,149 @@ export async function listWallets() {
     };
   }
   return result;
+}
+
+function serializeAddress(row: {
+  id: string;
+  tag: string;
+  address: string;
+  phone: string | null;
+  latitude: Prisma.Decimal | null;
+  longitude: Prisma.Decimal | null;
+  isDefault: boolean;
+}): ClientAddress {
+  return {
+    id: row.id,
+    tag: row.tag,
+    address: row.address,
+    phone: row.phone,
+    lat: row.latitude != null ? decimalToNumber(row.latitude) : null,
+    lng: row.longitude != null ? decimalToNumber(row.longitude) : null,
+    isDefault: row.isDefault,
+  };
+}
+
+export async function listCustomerAddresses(customer: { id: string; email: string }): Promise<ClientAddress[]> {
+  await ready();
+  const rows = await prisma.customerAddress.findMany({
+    where: { customerId: customer.id },
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+  });
+  return rows.map(serializeAddress);
+}
+
+export async function getCustomerAddressForUser(
+  addressId: string,
+  customer: { id: string; email: string }
+): Promise<ClientAddress> {
+  await ready();
+  const row = await prisma.customerAddress.findFirst({
+    where: { id: addressId, customerId: customer.id },
+  });
+  if (!row) throw new Error("Address not found");
+  return serializeAddress(row);
+}
+
+export async function createCustomerAddress(
+  customer: { id: string; email: string },
+  input: { tag: string; address: string; phone?: string; lat?: number; lng?: number; isDefault?: boolean }
+): Promise<ClientAddress> {
+  await ready();
+  const addressCheck = validateAddress(input.address);
+  if (!addressCheck.valid) throw new Error(addressCheck.error || "Invalid address");
+
+  let phone: string | null = null;
+  if (input.phone) {
+    const phoneCheck = validatePhone(input.phone.replace(/\D/g, "").slice(-10));
+    if (!phoneCheck.valid) throw new Error(phoneCheck.error || "Invalid phone");
+    phone = phoneCheck.sanitized;
+  }
+
+  if (input.lat != null && input.lng != null) {
+    const coordCheck = validateCoordinates(input.lat, input.lng);
+    if (!coordCheck.valid) throw new Error(coordCheck.error || "Invalid coordinates");
+  }
+
+  const existing = await prisma.customerAddress.count({ where: { customerId: customer.id } });
+  const makeDefault = input.isDefault ?? existing === 0;
+
+  return prisma.$transaction(async (tx) => {
+    if (makeDefault) {
+      await tx.customerAddress.updateMany({
+        where: { customerId: customer.id },
+        data: { isDefault: false },
+      });
+    }
+    const row = await tx.customerAddress.create({
+      data: {
+        customerId: customer.id,
+        customerEmail: customer.email.toLowerCase(),
+        tag: input.tag.slice(0, 40) || "Home",
+        address: addressCheck.sanitized,
+        phone,
+        latitude: input.lat,
+        longitude: input.lng,
+        isDefault: makeDefault,
+      },
+    });
+    return serializeAddress(row);
+  });
+}
+
+export async function updateCustomerAddress(
+  addressId: string,
+  customer: { id: string; email: string },
+  input: Partial<{ tag: string; address: string; phone: string; lat: number; lng: number; isDefault: boolean }>
+): Promise<ClientAddress> {
+  await ready();
+  await getCustomerAddressForUser(addressId, customer);
+
+  const data: Prisma.CustomerAddressUpdateInput = {};
+  if (input.tag != null) data.tag = input.tag.slice(0, 40);
+  if (input.address != null) {
+    const addressCheck = validateAddress(input.address);
+    if (!addressCheck.valid) throw new Error(addressCheck.error || "Invalid address");
+    data.address = addressCheck.sanitized;
+  }
+  if (input.phone != null) {
+    const phoneCheck = validatePhone(input.phone.replace(/\D/g, "").slice(-10));
+    if (!phoneCheck.valid) throw new Error(phoneCheck.error || "Invalid phone");
+    data.phone = phoneCheck.sanitized;
+  }
+  if (input.lat != null && input.lng != null) {
+    const coordCheck = validateCoordinates(input.lat, input.lng);
+    if (!coordCheck.valid) throw new Error(coordCheck.error || "Invalid coordinates");
+    data.latitude = input.lat;
+    data.longitude = input.lng;
+  }
+
+  return prisma.$transaction(async (tx) => {
+    if (input.isDefault) {
+      await tx.customerAddress.updateMany({
+        where: { customerId: customer.id },
+        data: { isDefault: false },
+      });
+      data.isDefault = true;
+    }
+    const row = await tx.customerAddress.update({ where: { id: addressId }, data });
+    return serializeAddress(row);
+  });
+}
+
+export async function deleteCustomerAddress(addressId: string, customer: { id: string; email: string }): Promise<void> {
+  await ready();
+  const existing = await prisma.customerAddress.findFirst({
+    where: { id: addressId, customerId: customer.id },
+  });
+  if (!existing) throw new Error("Address not found");
+  await prisma.customerAddress.delete({ where: { id: addressId } });
+  if (existing.isDefault) {
+    const next = await prisma.customerAddress.findFirst({
+      where: { customerId: customer.id },
+      orderBy: { createdAt: "asc" },
+    });
+    if (next) {
+      await prisma.customerAddress.update({ where: { id: next.id }, data: { isDefault: true } });
+    }
+  }
 }

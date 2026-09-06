@@ -16,6 +16,16 @@ export type StaffIdentity = {
 };
 
 export async function getCustomerFromRequest(request: NextRequest): Promise<CustomerIdentity | null> {
+  const testSecret = process.env.INTEGRATION_TEST_SECRET;
+  if (testSecret && process.env.NODE_ENV !== "production") {
+    const headerSecret = request.headers.get("x-integration-test-secret");
+    if (headerSecret && headerSecret === testSecret) {
+      const email = request.headers.get("x-test-customer-email");
+      const id = request.headers.get("x-test-customer-id") || "integration-test-user";
+      if (email) return { id, email: email.toLowerCase() };
+    }
+  }
+
   const authHeader = request.headers.get("authorization");
   const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   if (!bearer) return null;
@@ -26,6 +36,14 @@ export async function getCustomerFromRequest(request: NextRequest): Promise<Cust
   const { data, error } = await supabase.auth.getUser(bearer);
   if (error || !data.user?.email) return null;
   return { id: data.user.id, email: data.user.email.toLowerCase() };
+}
+
+export async function requireCustomerAsync(request: NextRequest): Promise<CustomerIdentity> {
+  const customer = await getCustomerFromRequest(request);
+  if (!customer) {
+    throw new ApiError("Unauthorized", 401);
+  }
+  return customer;
 }
 
 export function getStaffFromRequest(request: NextRequest): StaffIdentity | null {
@@ -70,6 +88,17 @@ export class ApiError extends Error {
 export function handleApiError(error: unknown) {
   if (error instanceof ApiError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
+  }
+  if (error instanceof Error) {
+    if (error.message === "Forbidden") {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    if (error.message === "Unauthorized" || error.message.includes("Login required")) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+    if (error.message.includes("not found") || error.message.includes("Not found")) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    }
   }
   console.error(error);
   return NextResponse.json({ error: "Internal server error" }, { status: 500 });

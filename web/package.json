@@ -8,7 +8,7 @@
     "start": "next start -p 3001",
     "type-check": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "npx tsx src/tests/test_flows.ts && npx tsx src/tests/test_store_api.ts",
+    "test": "npx tsx src/tests/test_flows.ts && npx tsx src/tests/test_store_api.ts && npx tsx src/tests/test_production_signoff.ts",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",

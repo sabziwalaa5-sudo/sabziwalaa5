@@ -9,6 +9,7 @@ import {
   assertOrderAccess,
 } from "../../../lib/server/repository";
 import { getCustomerFromRequest, getStaffFromRequest, requireStaff, vendorEmailForStaff } from "../../../lib/server/auth";
+import { checkServerRateLimit, clientIp } from "../../../lib/serverRateLimit";
 
 export const GET = withApiHandler(async (request: NextRequest) => {
   const customer = await getCustomerFromRequest(request);
@@ -49,6 +50,9 @@ export const GET = withApiHandler(async (request: NextRequest) => {
 });
 
 export const POST = withApiHandler(async (request: NextRequest) => {
+  const limit = checkServerRateLimit(`orders-create:${clientIp(request)}`, 15, 60 * 1000);
+  if (!limit.allowed) throw new Error("Too many order requests. Please wait.");
+
   const customer = await getCustomerFromRequest(request);
   if (!customer) throw new Error("Login required to place orders");
 
@@ -65,7 +69,8 @@ export const POST = withApiHandler(async (request: NextRequest) => {
     customerEmail: customer.email,
     customerName: body.customerName ? String(body.customerName) : undefined,
     customerMobile: String(body.customerMobile || "0000000000"),
-    deliveryAddress: String(body.deliveryAddress || ""),
+    deliveryAddress: body.deliveryAddress ? String(body.deliveryAddress) : undefined,
+    addressId: body.addressId ? String(body.addressId) : undefined,
     latitude: body.latitude != null ? Number(body.latitude) : undefined,
     longitude: body.longitude != null ? Number(body.longitude) : undefined,
     paymentMethod: String(body.paymentMethod || "Cash on Delivery"),

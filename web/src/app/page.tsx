@@ -47,7 +47,7 @@ import { getAdminWebHref } from "../lib/config";
 import { getPlatformSettings, pointsEarnedForOrder, rupeesFromPoints, type PlatformSettings } from "../lib/platformSettings";
 import { INITIAL_CATEGORIES, INITIAL_REVIEWS } from "../lib/sharedState";
 import { useSabjiwalaStore } from "../hooks/useSabjiwalaStore";
-import { createOrderOnServer, setCartItemOnServer, clearCartOnServer } from "../lib/storeApi";
+import { createOrderOnServer, setCartItemOnServer, clearCartOnServer, fetchAddresses, saveAddress, updateAddressOnServer, deleteAddressOnServer } from "../lib/storeApi";
 
 export default function Home() {
   // Navigation & View Subtab
@@ -103,10 +103,7 @@ export default function Home() {
   const [expressAvailable, setExpressAvailable] = useState<boolean>(true);
 
   // Address list management
-  const [addresses, setAddresses] = useState<any[]>([
-    { id: "a1", tag: "Home", address: "Rajokri Crossroad, New Delhi", phone: "9876543210", lat: 28.5284, lng: 77.1028, isDefault: true },
-    { id: "a2", tag: "Office", address: "Vasant Kunj Sector B, Delhi", phone: "9999888877", lat: 28.5450, lng: 77.1560, isDefault: false }
-  ]);
+  const [addresses, setAddresses] = useState<any[]>([]);
   const [newAddressTag, setNewAddressTag] = useState("Home");
   const [newAddressText, setNewAddressText] = useState("");
 
@@ -171,6 +168,11 @@ export default function Home() {
     if (userEmail) {
       reloadWallet(userEmail);
       reloadStore();
+      fetchAddresses()
+        .then(setAddresses)
+        .catch(() => setAddresses([]));
+    } else {
+      setAddresses([]);
     }
   }, [userEmail, reloadWallet, reloadStore]);
 
@@ -375,28 +377,39 @@ export default function Home() {
 
 
   // Address operations
-  const handleAddAddress = () => {
-    if (!newAddressText.trim()) return;
-    const newAddr = {
-      id: `a_${Date.now()}`,
-      tag: newAddressTag,
-      address: newAddressText,
-      lat: customerCoords.lat,
-      lng: customerCoords.lng,
-      isDefault: addresses.length === 0
-    };
-    setAddresses((prev) => [...prev, newAddr]);
-    setNewAddressText("");
+  const handleAddAddress = async () => {
+    if (!newAddressText.trim() || !userEmail) return;
+    try {
+      const saved = await saveAddress({
+        tag: newAddressTag,
+        address: newAddressText,
+        lat: customerCoords.lat,
+        lng: customerCoords.lng,
+        isDefault: addresses.length === 0,
+      });
+      setAddresses((prev) => [...prev, saved]);
+      setNewAddressText("");
+    } catch (err: any) {
+      alert(err.message || "Unable to save address");
+    }
   };
 
-  const handleDeleteAddress = (id: string) => {
-    setAddresses((prev) => prev.filter((a) => a.id !== id));
+  const handleDeleteAddress = async (id: string) => {
+    try {
+      await deleteAddressOnServer(id);
+      setAddresses((prev) => prev.filter((a) => a.id !== id));
+    } catch (err: any) {
+      alert(err.message || "Unable to delete address");
+    }
   };
 
-  const handleSetDefaultAddress = (id: string) => {
-    setAddresses((prev) =>
-      prev.map((a) => ({ ...a, isDefault: a.id === id }))
-    );
+  const handleSetDefaultAddress = async (id: string) => {
+    try {
+      const updated = await updateAddressOnServer(id, { isDefault: true });
+      setAddresses((prev) => prev.map((a) => ({ ...a, isDefault: a.id === updated.id })));
+    } catch (err: any) {
+      alert(err.message || "Unable to update address");
+    }
   };
 
   // Order Placement logic
@@ -431,8 +444,8 @@ export default function Home() {
 
     const wallet = wallets[userEmail] || { pointsBalance: 0, lifetimeEarned: 0, lifetimeRedeemed: 0, history: [] };
     const safeRedeem = Math.max(0, Math.min(redeemedPointsInput || 0, wallet.pointsBalance));
-    const defaultAddress = addresses.find((a) => a.isDefault)?.address || locationName;
-    const customerMobile = String(addresses.find((a) => a.isDefault)?.phone || "").replace(/\D/g, "").slice(-10);
+    const defaultAddr = addresses.find((a) => a.isDefault) || addresses[0];
+    const customerMobile = String(defaultAddr?.phone || "").replace(/\D/g, "").slice(-10);
     const idempotencyKey = orderFingerprint({
       email: userEmail,
       items: cartItems,
@@ -451,13 +464,14 @@ export default function Home() {
       const order = await createOrderOnServer({
         lines: cartItems.map((item) => ({ productId: item.productId, quantity: item.qty })),
         customerMobile: customerMobile || "0000000000",
-        deliveryAddress: defaultAddress,
+        addressId: defaultAddr?.id,
+        deliveryAddress: defaultAddr?.address || locationName,
         paymentMethod: displayPaymentMethod(paymentMode),
         couponCode: appliedCoupon?.code,
         redeemedPoints: rupeesFromPoints(redeemedPointsInput || 0, platformSettings),
         idempotencyKey,
-        latitude: customerCoords.lat,
-        longitude: customerCoords.lng,
+        latitude: defaultAddr?.lat ?? customerCoords.lat,
+        longitude: defaultAddr?.lng ?? customerCoords.lng,
       });
 
       let paymentStatus = order.paymentStatus;
@@ -1235,16 +1249,20 @@ export default function Home() {
             wallets={wallets}
             addresses={addresses}
             setAddresses={setAddresses}
-            handleAddAddress={(tag, text) => {
-              const newAddr = {
-                id: `a_${Date.now()}`,
-                tag: tag,
-                address: text,
-                lat: customerCoords.lat,
-                lng: customerCoords.lng,
-                isDefault: addresses.length === 0
-              };
-              setAddresses((prev) => [...prev, newAddr]);
+            handleAddAddress={async (tag, text) => {
+              if (!userEmail) return;
+              try {
+                const saved = await saveAddress({
+                  tag,
+                  address: text,
+                  lat: customerCoords.lat,
+                  lng: customerCoords.lng,
+                  isDefault: addresses.length === 0,
+                });
+                setAddresses((prev) => [...prev, saved]);
+              } catch (err: any) {
+                alert(err.message || "Unable to save address");
+              }
             }}
             handleDeleteAddress={handleDeleteAddress}
             handleSetDefaultAddress={handleSetDefaultAddress}

@@ -630,8 +630,6 @@ export default function Home() {
     return matchesCat && matchesSearch;
   });
 
-  const bestSellerProducts = liveCatalog.filter((p) => p.badge === "bestseller" || p.rating >= 4.8);
-
   const renderProductGrid = (products: typeof liveCatalog) => (
     <div className="products-grid">
       {products.map((prod) => {
@@ -935,17 +933,10 @@ export default function Home() {
                 </div>
               ))}
 
-              {/* Fallback when storefront sections are not configured yet */}
-              {selectedCategory === "All" && storefrontSections.length === 0 && bestSellerProducts.length > 0 && (
-                <div style={{ animation: "fadeUp 0.5s var(--ease) both", animationDelay: "200ms" }}>
-                  <div className="section-header">
-                    <div>
-                      <span className="badge badge-bestseller" style={{ marginBottom: "4px" }}>🔥 Popular Demand</span>
-                      <h3 style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.02em" }}>Best Sellers</h3>
-                    </div>
-                    <span className="t-caption">Top rated items</span>
-                  </div>
-                  {renderProductGrid(bestSellerProducts)}
+              {selectedCategory === "All" && storefrontSections.length === 0 && (
+                <div className="card-premium" style={{ padding: "28px", textAlign: "center", marginBottom: "20px" }}>
+                  <p style={{ fontWeight: 700, marginBottom: "6px" }}>Storefront sections are not configured yet</p>
+                  <p className="t-caption">Active sections from the Admin Panel will appear here once they are created.</p>
                 </div>
               )}
 

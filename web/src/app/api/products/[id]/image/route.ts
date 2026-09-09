@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../lib/db";
 import { ApiError, handleApiError, requireStaff } from "../../../../../lib/server/auth";
 import { requireDatabase, jsonOk } from "../../../../../lib/server/routeUtils";
-import { deleteProductImage, isImageStorageConfigured, uploadProductImage } from "../../../../../lib/server/imageStorage";
+import {
+  cleanupReplacedProductImage,
+  deleteProductImage,
+  isImageStorageConfigured,
+  uploadProductImage,
+} from "../../../../../lib/server/imageStorage";
 import { updateProduct } from "../../../../../lib/server/repository";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -32,9 +37,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       imageStoragePath: uploaded.storagePath,
     });
 
-    if (oldPath && oldPath !== uploaded.storagePath) {
-      await deleteProductImage(oldPath).catch(() => undefined);
-    }
+    await cleanupReplacedProductImage(oldPath, uploaded.storagePath);
 
     return NextResponse.json({ product, imageUrl: uploaded.publicUrl });
   } catch (error) {

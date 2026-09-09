@@ -641,19 +641,55 @@ export async function ensureDefaultCatalogStructure() {
   catalogStructureReady = true;
 }
 
-export async function resolveCategoryId(categoryId?: string | null, categoryName?: string): Promise<{ categoryId: string | null; categoryName: string }> {
+export type ResolveCategoryOptions = {
+  /** Allows keeping an existing inactive category on update without re-assigning it. */
+  existingCategoryId?: string | null;
+  /** When true, new assignments must resolve to an active database category. */
+  requireActive?: boolean;
+};
+
+function assertCategoryAssignable(
+  row: { id: string; isActive: boolean },
+  existingCategoryId?: string | null,
+  requireActive = true
+) {
+  if (!requireActive || row.isActive) return;
+  if (existingCategoryId && row.id === existingCategoryId) return;
+  throw new ApiError("Category is inactive and cannot be assigned", 400);
+}
+
+export async function resolveCategoryId(
+  categoryId?: string | null,
+  categoryName?: string,
+  options?: ResolveCategoryOptions
+): Promise<{ categoryId: string | null; categoryName: string }> {
+  const existingCategoryId = options?.existingCategoryId ?? null;
+  const requireActive = options?.requireActive ?? true;
   await ready();
+
   if (categoryId) {
     const row = await prisma.productCategory.findUnique({ where: { id: categoryId } });
     if (!row) throw new ApiError("Category not found", 404);
+    assertCategoryAssignable(row, existingCategoryId, requireActive);
     return { categoryId: row.id, categoryName: row.name };
   }
+
   if (categoryName) {
     const row = await prisma.productCategory.findFirst({
       where: { OR: [{ name: categoryName }, { slug: slugify(categoryName) }] },
     });
-    if (row) return { categoryId: row.id, categoryName: row.name };
+    if (row) {
+      assertCategoryAssignable(row, existingCategoryId, requireActive);
+      return { categoryId: row.id, categoryName: row.name };
+    }
+    if (requireActive) {
+      const activeCount = await prisma.productCategory.count({ where: { isActive: true } });
+      if (activeCount > 0) {
+        throw new ApiError("A valid active category is required", 400);
+      }
+    }
     return { categoryId: null, categoryName: categoryName.trim() };
   }
+
   throw new ApiError("Category is required", 400);
 }

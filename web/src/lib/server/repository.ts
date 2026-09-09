@@ -268,7 +268,7 @@ export async function createProduct(input: {
   sectionIds?: string[];
 }) {
   await ready();
-  const resolved = await resolveCategoryId(input.categoryId, input.category);
+  const resolved = await resolveCategoryId(input.categoryId, input.category, { requireActive: true });
   const product = await prisma.product.create({
     data: {
       id: input.id || `p_${Date.now()}`,
@@ -322,7 +322,11 @@ export async function updateProduct(
   const { sectionIds, categoryId, category, ...rest } = input;
   let data: Prisma.ProductUpdateInput = { ...rest };
   if (categoryId != null || category != null) {
-    const resolved = await resolveCategoryId(categoryId, category);
+    const existing = await prisma.product.findUnique({ where: { id }, select: { categoryId: true } });
+    const resolved = await resolveCategoryId(categoryId, category, {
+      existingCategoryId: existing?.categoryId,
+      requireActive: true,
+    });
     data = {
       ...data,
       category: resolved.categoryName,

@@ -5,7 +5,7 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Store, DollarSign, Package, ShoppingBag, BarChart } from "lucide-react";
 import { useSabjiwalaStore } from "../../hooks/useSabjiwalaStore";
-import { saveProduct, removeProduct, updateOrderStatusOnServer } from "../../lib/storeApi";
+import { saveProduct, removeProduct, updateOrderStatusOnServer, fetchCategories, type ClientCategory } from "../../lib/storeApi";
 import { resolveUserRole } from "../../lib/resolveRole";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
@@ -39,9 +39,11 @@ export default function VendorPortal() {
     price: 0,
     unit: "1 kg",
     image: "🥦",
-    category: "Vegetables",
+    category: "",
+    categoryId: "",
     stock: 100
   });
+  const [categoryList, setCategoryList] = useState<ClientCategory[]>([]);
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
 
@@ -71,6 +73,13 @@ export default function VendorPortal() {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!userEmail) return;
+    fetchCategories(false)
+      .then(setCategoryList)
+      .catch(() => setCategoryList([]));
+  }, [userEmail]);
 
   const verifySessionRole = async (user: any) => {
     const email = user.email || "";
@@ -161,6 +170,7 @@ export default function VendorPortal() {
         unit: productForm.unit,
         image: productForm.image,
         category: productForm.category,
+        categoryId: productForm.categoryId || undefined,
         stock: productForm.stock,
       });
       setProductsList((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
@@ -174,6 +184,7 @@ export default function VendorPortal() {
         unit: productForm.unit,
         image: productForm.image,
         category: productForm.category,
+        categoryId: productForm.categoryId || undefined,
         stock: productForm.stock,
         isFarmFresh: true,
       });
@@ -192,6 +203,15 @@ export default function VendorPortal() {
     }
   };
 
+  const vendorCategoryOptions = () => {
+    const active = categoryList.filter((c) => c.isActive);
+    if (editingProduct?.categoryId && !active.some((c) => c.id === editingProduct.categoryId)) {
+      const current = categoryList.find((c) => c.id === editingProduct.categoryId);
+      if (current) return [current, ...active];
+    }
+    return active;
+  };
+
   const handleEditClick = (prod: any) => {
     setEditingProduct(prod);
     setProductForm({
@@ -201,6 +221,7 @@ export default function VendorPortal() {
       unit: prod.unit,
       image: prod.image,
       category: prod.category,
+      categoryId: prod.categoryId || "",
       stock: prod.stock
     });
     setProductFormOpen(true);
@@ -208,13 +229,15 @@ export default function VendorPortal() {
 
   const handleAddClick = () => {
     setEditingProduct(null);
+    const defaultCategory = categoryList.find((c) => c.isActive);
     setProductForm({
       name: "",
       hindiName: "",
       price: 0,
       unit: "1 kg",
       image: "🥬",
-      category: "Vegetables",
+      category: defaultCategory?.name || "",
+      categoryId: defaultCategory?.id || "",
       stock: 100
     });
     setProductFormOpen(true);
@@ -790,12 +813,24 @@ export default function VendorPortal() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
                   <label style={{ fontSize: "0.8rem", fontWeight: "600" }}>Category</label>
                   <select
-                    value={productForm.category}
-                    onChange={(e) => setProductForm(prev => ({ ...prev, category: e.target.value }))}
+                    required
+                    value={productForm.categoryId}
+                    onChange={(e) => {
+                      const selected = vendorCategoryOptions().find((c) => c.id === e.target.value);
+                      setProductForm((prev) => ({
+                        ...prev,
+                        categoryId: e.target.value,
+                        category: selected?.name || prev.category,
+                      }));
+                    }}
                     style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }}
                   >
-                    <option value="Vegetables">Vegetables</option>
-                    <option value="Fruits">Fruits</option>
+                    <option value="" disabled>Select category</option>
+                    {vendorCategoryOptions().map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}{cat.isActive ? "" : " (inactive)"}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

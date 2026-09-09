@@ -110,6 +110,19 @@ export async function deleteProductImage(storagePath: string | null | undefined)
   await client.storage.from(bucket).remove([normalized]);
 }
 
+/** Delete a replaced image only after the database points at a different path. */
+export async function cleanupReplacedProductImage(
+  previousPath: string | null | undefined,
+  nextPath: string | null | undefined
+): Promise<void> {
+  const previous = previousPath?.trim();
+  const next = nextPath?.trim();
+  if (!previous || !next || previous === next) return;
+  await deleteProductImage(previous).catch(() => undefined);
+}
+
+export const PRODUCT_IMAGE_MAX_BYTES = MAX_BYTES;
+
 export function isImageStorageConfigured(): boolean {
   return Boolean(getSupabaseUrl() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
 }

@@ -21,6 +21,7 @@ import {
   assignProductToSection,
   removeProductFromSection,
   updateCategory,
+  resolveCategoryId,
 } from "../lib/server/catalog";
 import { createProduct } from "../lib/server/repository";
 
@@ -75,19 +76,19 @@ async function main() {
   const created = await createCategory({ name: `Organic ${unique}`, slug: unique });
   assert(created.isActive === true, "category create works");
 
-  const updated = await updateCategory(created.id, { isActive: false, description: "Test category" });
-  assert(updated.isActive === false, "category deactivate works");
-
   const product = await createProduct({
     vendorId: "v1",
     name: `Cat Product ${unique}`,
     price: 10,
     unit: "1 kg",
-    category: updated.name,
+    category: created.name,
     categoryId: created.id,
     stock: 5,
   });
   assert(product.categoryId === created.id, "product category relationship persists");
+
+  const updated = await updateCategory(created.id, { isActive: false, description: "Test category" });
+  assert(updated.isActive === false, "category deactivate works");
 
   let blocked = false;
   try {
@@ -138,6 +139,17 @@ async function main() {
   const sections = await listSections();
   assert(sections.some((s) => s.sectionType === "BEST_SELLERS"), "best sellers section exists");
   assert(sections.some((s) => s.sectionType === "NEW_ARRIVALS"), "new arrivals section exists");
+
+  const inactive = await createCategory({ name: `Inactive ${unique}`, slug: `${unique}-inactive` });
+  await updateCategory(inactive.id, { isActive: false });
+  let inactiveBlocked = false;
+  try {
+    await resolveCategoryId(inactive.id, undefined, { requireActive: true });
+  } catch (error) {
+    inactiveBlocked = error instanceof Error && error.message.includes("inactive");
+  }
+  assert(inactiveBlocked, "inactive category rejected for new product assignment");
+  await prisma.productCategory.delete({ where: { id: inactive.id } });
 
   console.log(`\n📊 Catalog/Section Tests: ${passed}/${total} passed`);
   await prisma.$disconnect();

@@ -12,7 +12,7 @@
     "start": "node scripts/start-production.mjs",
     "type-check": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "npx tsx src/tests/test_flows.ts && npx tsx src/tests/test_store_api.ts && npx tsx src/tests/test_production_signoff.ts && npx tsx src/tests/test_catalog_sections.ts && npx tsx src/tests/test_search_recommendations.ts",
+    "test": "npx tsx src/tests/test_flows.ts && npx tsx src/tests/test_store_api.ts && npx tsx src/tests/test_production_signoff.ts && npx tsx src/tests/test_catalog_sections.ts && npx tsx src/tests/test_search_recommendations.ts && npx tsx src/tests/test_catalog_consistency.ts && npx tsx src/tests/test_image_upload.ts",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",

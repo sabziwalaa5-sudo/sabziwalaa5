@@ -2,11 +2,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, react/no-unescaped-entities */
 
 import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase, startGoogleOAuth, requireSupabaseAuth } from "../lib/supabase";
 import { validateOrder, validateCouponCode, validateEmail } from "../lib/validation";
 import { RateLimits } from "../lib/rateLimiter";
 import { buildCartItems, computeBill, nextCartQuantity, orderFingerprint } from "../lib/orderEngine";
 import { createPaymentOnServer, displayPaymentMethod, verifyPaymentOnServer } from "../lib/paymentClient";
+import { logger } from "../lib/logger";
 import {
   ShoppingBag,
   MapPin,
@@ -25,9 +26,7 @@ import {
   Sparkles,
   X,
   Gift,
-  Search,
   Home as HomeIcon,
-  Mic,
   Bell,
   ChevronRight,
   Star,
@@ -38,19 +37,17 @@ import {
   SlidersHorizontal
 } from "lucide-react";
 import ProfileDashboard from "../components/ProfileDashboard";
-import {
-  STATE_KEYS,
-  getStoredState,
-  setStoredState,
-  INITIAL_VENDORS,
-  INITIAL_PRODUCTS,
-  INITIAL_ORDERS,
-  INITIAL_WALLETS,
-  INITIAL_COUPONS,
-  INITIAL_CAMPAIGNS,
-  INITIAL_CATEGORIES,
-  INITIAL_REVIEWS
-} from "../lib/sharedState";
+import PortalNav, { StaffLoginLinks } from "../components/PortalNav";
+import AppLoadingShell from "../components/AppLoadingShell";
+import { BrandLogo } from "../components/BrandLogo";
+import { type AppRole, portalPathForRole } from "../lib/roles";
+import { resolveUserRole } from "../lib/resolveRole";
+import { getAdminWebHref } from "../lib/config";
+import { getPlatformSettings, pointsEarnedForOrder, rupeesFromPoints, type PlatformSettings } from "../lib/platformSettings";
+import { INITIAL_REVIEWS } from "../lib/sharedState";
+import { useSabjiwalaStore } from "../hooks/useSabjiwalaStore";
+import { createOrderOnServer, setCartItemOnServer, clearCartOnServer, fetchAddresses, saveAddress, updateAddressOnServer, deleteAddressOnServer, fetchStorefront, fetchCategories, type ClientCategory, type StorefrontSectionPayload } from "../lib/storeApi";
+import SearchBarWithRecommendations from "../components/SearchBarWithRecommendations";
 
 export default function Home() {
   // Navigation & View Subtab
@@ -69,7 +66,7 @@ export default function Home() {
 
   // Auth State
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -83,35 +80,42 @@ export default function Home() {
 
   // Delivery Zone Engine States
   const [deliveryCharge, setDeliveryCharge] = useState<number>(30);
+  const {
+    loading: storeLoading,
+    productsList,
+    setProductsList,
+    vendorsList,
+    ordersList,
+    setOrdersList,
+    wallets,
+    setWallets,
+    availableCoupons,
+    platformSettings,
+    setPlatformSettingsState,
+    cart,
+    setCart,
+    reload: reloadStore,
+    reloadWallet,
+  } = useSabjiwalaStore();
+  const [bonusCampaigns] = useState([{ id: "bc1", name: "Welcome Bonus Campaign", points: 50, active: true }]);
   const [minOrderValue, setMinOrderValue] = useState<number>(100);
   const [estimatedDeliveryTime, setEstimatedDeliveryTime] = useState<number>(30);
   const [expressAvailable, setExpressAvailable] = useState<boolean>(true);
 
-  // Synchronized States from localStorage
-  const [vendorsList, setVendorsList] = useState(() => getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-  const [productsList, setProductsList] = useState(() => getStoredState(STATE_KEYS.PRODUCTS, INITIAL_PRODUCTS));
-  const [ordersList, setOrdersList] = useState(() => getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
-  const [wallets, setWallets] = useState(() => getStoredState(STATE_KEYS.WALLETS, INITIAL_WALLETS));
-  const [availableCoupons, setAvailableCoupons] = useState(() => getStoredState(STATE_KEYS.COUPONS, INITIAL_COUPONS));
-  const [bonusCampaigns, setBonusCampaigns] = useState(() => getStoredState(STATE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS));
-
   // Address list management
-  const [addresses, setAddresses] = useState<any[]>([
-    { id: "a1", tag: "Home", address: "Rajokri Crossroad, New Delhi", lat: 28.5284, lng: 77.1028, isDefault: true },
-    { id: "a2", tag: "Office", address: "Vasant Kunj Sector B, Delhi", lat: 28.5450, lng: 77.1560, isDefault: false }
-  ]);
+  const [addresses, setAddresses] = useState<any[]>([]);
   const [newAddressTag, setNewAddressTag] = useState("Home");
   const [newAddressText, setNewAddressText] = useState("");
 
   // Cart & Orders
-  const [cart, setCart] = useState<{ [key: string]: number }>({});
-  const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [paymentMode, setPaymentMode] = useState<"cod" | "upi" | "card">("cod");
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [dbCategories, setDbCategories] = useState<ClientCategory[]>([]);
+  const [storefrontSections, setStorefrontSections] = useState<StorefrontSectionPayload[]>([]);
   const [wishlist, setWishlist] = useState<{ [id: string]: boolean }>({});
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<any | null>(null);
@@ -132,53 +136,60 @@ export default function Home() {
   // Check auth session
   useEffect(() => {
     setMounted(true);
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUserEmail(session.user.email || null);
-        setUserRole("customer");
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUserEmail(session.user.email || null);
-        setUserRole("customer");
-      } else {
+    const applySession = async (sessionUser: { id?: string; email?: string | null } | null) => {
+      if (!sessionUser) {
         setUserEmail(null);
         setUserRole(null);
+        return;
       }
+      const role = await resolveUserRole(sessionUser);
+      setUserEmail(sessionUser.email || null);
+      setUserRole(role);
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      applySession(session?.user || null);
+    });
+
+    fetchCategories(true).then(setDbCategories).catch(() => undefined);
+    fetchStorefront().then((payload) => {
+      setDbCategories(payload.categories);
+      setStorefrontSections(payload.sections);
+    }).catch(() => undefined);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      applySession(session?.user || null);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // Listen to cross-tab localStorage sync
   useEffect(() => {
-    const handleSync = () => {
-      setVendorsList(getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-      setProductsList(getStoredState(STATE_KEYS.PRODUCTS, INITIAL_PRODUCTS));
-      setOrdersList(getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
-      setWallets(getStoredState(STATE_KEYS.WALLETS, INITIAL_WALLETS));
-      setAvailableCoupons(getStoredState(STATE_KEYS.COUPONS, INITIAL_COUPONS));
-      setBonusCampaigns(getStoredState(STATE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS));
-    };
+    setMinOrderValue(platformSettings.minOrderThreshold);
+    if ((platformSettings as { deliveryCharge?: number }).deliveryCharge != null) {
+      setDeliveryCharge((platformSettings as { deliveryCharge?: number }).deliveryCharge || 30);
+    }
+  }, [platformSettings]);
 
-    window.addEventListener("sabjiwala_state_update", handleSync);
-    return () => window.removeEventListener("sabjiwala_state_update", handleSync);
-  }, []);
+  useEffect(() => {
+    if (userEmail) {
+      reloadWallet(userEmail);
+      reloadStore();
+      fetchAddresses()
+        .then(setAddresses)
+        .catch(() => setAddresses([]));
+    } else {
+      setAddresses([]);
+    }
+  }, [userEmail, reloadWallet, reloadStore]);
 
   // Google Sign-In helper
   const handleGoogleSignIn = async () => {
     try {
       setAuthLoading(true);
       setAuthError(null);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: typeof window !== 'undefined' ? window.location.href : undefined,
-        },
-      });
-      if (error) throw error;
+      const result = await startGoogleOAuth(window.location.href);
+      if (result.error) throw new Error(result.error);
     } catch (err: any) {
       setAuthError(err.message || "Google Sign-In failed. Use email login instead.");
     } finally {
@@ -205,15 +216,20 @@ export default function Home() {
     try {
       setAuthLoading(true);
       setAuthError(null);
+      await requireSupabaseAuth();
       const action = isRegistering
         ? supabase.auth.signUp({ email: emailCheck.sanitized, password: loginPassword })
         : supabase.auth.signInWithPassword({ email: emailCheck.sanitized, password: loginPassword });
       const { data, error } = await action;
       if (error) throw error;
       if (data.user?.email) {
+        const role = await resolveUserRole(data.user);
         setUserEmail(data.user.email);
-        setUserRole("customer");
+        setUserRole(role);
         setShowLoginModal(false);
+        if (role !== "CUSTOMER") {
+          window.location.assign(role === "ADMIN" ? getAdminWebHref() : portalPathForRole(role));
+        }
       } else if (isRegistering) {
         setAuthError("Check your email to confirm the account, then sign in.");
       }
@@ -298,34 +314,34 @@ export default function Home() {
   };
 
   // Cart operations
-  const addToCart = (productId: string) => {
+  const addToCart = async (productId: string) => {
     const product = productsList.find((p) => p.id === productId);
     if (!product) return;
     if ((product.stock || 0) <= 0) {
       alert("This product is currently unavailable.");
       return;
     }
-    setCart((prev) => {
-      const nextQty = nextCartQuantity(prev[productId] || 0, 1, product.stock);
-      if (nextQty <= 0) return prev;
-      if (nextQty === (prev[productId] || 0)) {
-        alert(`Only ${product.stock} units available.`);
-        return prev;
-      }
-      return { ...prev, [productId]: nextQty };
-    });
+    const nextQty = nextCartQuantity(cart[productId] || 0, 1, product.stock);
+    if (nextQty <= 0 || nextQty === (cart[productId] || 0)) {
+      alert(`Only ${product.stock} units available.`);
+      return;
+    }
+    try {
+      const items = await setCartItemOnServer(productId, nextQty);
+      setCart(items);
+    } catch (err: any) {
+      alert(err.message || "Unable to update cart");
+    }
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => {
-      const next = { ...prev };
-      if (next[productId] > 1) {
-        next[productId] -= 1;
-      } else {
-        delete next[productId];
-      }
-      return next;
-    });
+  const removeFromCart = async (productId: string) => {
+    const nextQty = (cart[productId] || 0) > 1 ? (cart[productId] || 0) - 1 : 0;
+    try {
+      const items = await setCartItemOnServer(productId, nextQty);
+      setCart(items);
+    } catch (err: any) {
+      alert(err.message || "Unable to update cart");
+    }
   };
 
   const getCartTotal = () => {
@@ -368,28 +384,39 @@ export default function Home() {
 
 
   // Address operations
-  const handleAddAddress = () => {
-    if (!newAddressText.trim()) return;
-    const newAddr = {
-      id: `a_${Date.now()}`,
-      tag: newAddressTag,
-      address: newAddressText,
-      lat: customerCoords.lat,
-      lng: customerCoords.lng,
-      isDefault: addresses.length === 0
-    };
-    setAddresses((prev) => [...prev, newAddr]);
-    setNewAddressText("");
+  const handleAddAddress = async () => {
+    if (!newAddressText.trim() || !userEmail) return;
+    try {
+      const saved = await saveAddress({
+        tag: newAddressTag,
+        address: newAddressText,
+        lat: customerCoords.lat,
+        lng: customerCoords.lng,
+        isDefault: addresses.length === 0,
+      });
+      setAddresses((prev) => [...prev, saved]);
+      setNewAddressText("");
+    } catch (err: any) {
+      alert(err.message || "Unable to save address");
+    }
   };
 
-  const handleDeleteAddress = (id: string) => {
-    setAddresses((prev) => prev.filter((a) => a.id !== id));
+  const handleDeleteAddress = async (id: string) => {
+    try {
+      await deleteAddressOnServer(id);
+      setAddresses((prev) => prev.filter((a) => a.id !== id));
+    } catch (err: any) {
+      alert(err.message || "Unable to delete address");
+    }
   };
 
-  const handleSetDefaultAddress = (id: string) => {
-    setAddresses((prev) =>
-      prev.map((a) => ({ ...a, isDefault: a.id === id }))
-    );
+  const handleSetDefaultAddress = async (id: string) => {
+    try {
+      const updated = await updateAddressOnServer(id, { isDefault: true });
+      setAddresses((prev) => prev.map((a) => ({ ...a, isDefault: a.id === updated.id })));
+    } catch (err: any) {
+      alert(err.message || "Unable to update address");
+    }
   };
 
   // Order Placement logic
@@ -398,6 +425,11 @@ export default function Home() {
     if (!userEmail) {
       setLoginRequiredFor("checkout");
       setShowLoginModal(true);
+      return;
+    }
+
+    if (platformSettings.maintenanceMode) {
+      setCheckoutError("The storefront is in maintenance mode. Checkout is temporarily closed by the administrator.");
       return;
     }
 
@@ -418,56 +450,17 @@ export default function Home() {
     }
 
     const wallet = wallets[userEmail] || { pointsBalance: 0, lifetimeEarned: 0, lifetimeRedeemed: 0, history: [] };
-    const safeRedeem = Math.max(0, Math.min(redeemedPointsInput || 0, wallet.pointsBalance, getCartTotal()));
-    const subtotal = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
-    const couponDiscount = getCouponDiscount();
-    const bill = computeBill({
-      subtotal,
-      couponDiscount,
-      redeemedPoints: safeRedeem,
-      deliveryCharge,
-      freeDeliveryThreshold: 200,
-    });
-
-    if (subtotal < minOrderValue) {
-      setCheckoutError(`Minimum order value is ₹${minOrderValue}.`);
-      return;
-    }
-
-    const defaultAddress = addresses.find((a) => a.isDefault)?.address || locationName;
-    const orderDraftId = `SBJ${Date.now().toString().slice(-8)}`;
-    const fingerprint = orderFingerprint({
+    const safeRedeem = Math.max(0, Math.min(redeemedPointsInput || 0, wallet.pointsBalance));
+    const defaultAddr = addresses.find((a) => a.isDefault) || addresses[0];
+    const customerMobile = String(defaultAddr?.phone || "").replace(/\D/g, "").slice(-10);
+    const idempotencyKey = orderFingerprint({
       email: userEmail,
       items: cartItems,
-      totalAmount: bill.totalAmount,
+      totalAmount: getCartTotal(),
     });
-    if (fingerprint === lastOrderFingerprint.current && Date.now() - lastOrderAt.current < 60000) {
+
+    if (idempotencyKey === lastOrderFingerprint.current && Date.now() - lastOrderAt.current < 60000) {
       setCheckoutError("Duplicate order blocked. Please wait a minute before retrying the same cart.");
-      return;
-    }
-
-    const orderPayload = {
-      id: orderDraftId,
-      date: new Date().toLocaleString("en-IN"),
-      customerName: userEmail.split("@")[0],
-      customerEmail: userEmail,
-      customerMobile: "9876543210",
-      deliveryAddress: defaultAddress,
-      paymentMethod: displayPaymentMethod(paymentMode),
-      paymentStatus: paymentMode === "cod" ? "Pending" : "Pending",
-      orderStatus: "Pending",
-      items: cartItems,
-      subtotal,
-      deliveryCharges: bill.deliveryCharges,
-      discount: bill.discount,
-      totalAmount: bill.totalAmount,
-      vendorId: vendorsList[0]?.vendor_id || "v1",
-      paymentId: "",
-    };
-
-    const valResult = validateOrder(orderPayload);
-    if (!valResult.valid) {
-      setCheckoutError(`Order validation failed: ${valResult.errors.join(", ")}`);
       return;
     }
 
@@ -475,30 +468,40 @@ export default function Home() {
     setCheckoutError("");
 
     try {
-      let paymentStatus = "Pending";
-      let paymentId = "";
+      const order = await createOrderOnServer({
+        lines: cartItems.map((item) => ({ productId: item.productId, quantity: item.qty })),
+        customerMobile: customerMobile || "0000000000",
+        addressId: defaultAddr?.id,
+        deliveryAddress: defaultAddr?.address || locationName,
+        paymentMethod: displayPaymentMethod(paymentMode),
+        couponCode: appliedCoupon?.code,
+        redeemedPoints: rupeesFromPoints(redeemedPointsInput || 0, platformSettings),
+        idempotencyKey,
+        latitude: defaultAddr?.lat ?? customerCoords.lat,
+        longitude: defaultAddr?.lng ?? customerCoords.lng,
+      });
+
+      let paymentStatus = order.paymentStatus;
+      let paymentId = order.paymentId || "";
 
       if (paymentMode === "cod") {
-        try {
-          const created = await createPaymentOnServer({
-            orderDraftId,
-            amountRupees: bill.totalAmount,
-            method: "cod",
-          });
-          const verified = await verifyPaymentOnServer({
-            paymentId: created.paymentId,
-            checkoutToken: created.checkoutToken,
-            outcome: "success",
-          });
-          paymentId = verified.paymentId;
-          paymentStatus = "Pending";
-        } catch {
-          paymentStatus = "Pending";
-        }
+        const created = await createPaymentOnServer({
+          orderDraftId: order.id,
+          amountRupees: order.totalAmount,
+          method: "cod",
+        });
+        const verified = await verifyPaymentOnServer({
+          paymentId: created.paymentId,
+          checkoutToken: created.checkoutToken,
+          outcome: "success",
+          orderId: order.id,
+        });
+        paymentId = verified.paymentId;
+        paymentStatus = "Pending";
       } else {
         const created = await createPaymentOnServer({
-          orderDraftId,
-          amountRupees: bill.totalAmount,
+          orderDraftId: order.id,
+          amountRupees: order.totalAmount,
           method: paymentMode,
         });
         if (!created.gatewayConfigured || !created.razorpayKeyId) {
@@ -518,7 +521,7 @@ export default function Home() {
               amount: created.amountPaise,
               currency: "INR",
               name: "Sabjiwala",
-              description: `Order ${orderDraftId}`,
+              description: `Order ${order.id}`,
               order_id: created.razorpayOrderId,
               handler: async (response: any) => {
                 try {
@@ -529,6 +532,7 @@ export default function Home() {
                     razorpay_payment_id: response.razorpay_payment_id,
                     razorpay_signature: response.razorpay_signature,
                     outcome: "success",
+                    orderId: order.id,
                   });
                   if (result.status !== "PAID") {
                     reject(new Error("Payment was not verified by the server"));
@@ -545,6 +549,7 @@ export default function Home() {
                     paymentId: created.paymentId,
                     checkoutToken: created.checkoutToken,
                     outcome: "cancelled",
+                    orderId: order.id,
                   }).catch(() => undefined);
                   reject(new Error("Payment cancelled"));
                 },
@@ -555,6 +560,7 @@ export default function Home() {
                 paymentId: created.paymentId,
                 checkoutToken: created.checkoutToken,
                 outcome: "failure",
+                orderId: order.id,
               }).catch(() => undefined);
               reject(new Error("Payment failed"));
             });
@@ -584,62 +590,26 @@ export default function Home() {
         }
       }
 
-      orderPayload.paymentStatus = paymentStatus;
-      orderPayload.paymentId = paymentId;
-
-      const updatedOrders = [orderPayload, ...ordersList];
-      setOrdersList(updatedOrders);
-      setStoredState(STATE_KEYS.ORDERS, updatedOrders);
-      setActiveOrder(orderPayload);
-      lastOrderFingerprint.current = fingerprint;
-      lastOrderAt.current = Date.now();
-
-      const pointsEarned = Math.floor(bill.totalAmount / 10);
-      const newBalance = wallet.pointsBalance - safeRedeem + pointsEarned;
-      const updatedWallet = {
-        ...wallet,
-        pointsBalance: newBalance,
-        lifetimeEarned: wallet.lifetimeEarned + pointsEarned,
-        lifetimeRedeemed: wallet.lifetimeRedeemed + safeRedeem,
-        history: [
-          ...wallet.history,
-          ...(safeRedeem > 0 ? [{ id: `tx_${Date.now()}_r`, type: "REDEEMED", points: safeRedeem, orderId: orderPayload.id, date: orderPayload.date, balance: wallet.pointsBalance - safeRedeem }] : []),
-          { id: `tx_${Date.now()}_e`, type: "EARNED", points: pointsEarned, orderId: orderPayload.id, date: orderPayload.date, balance: newBalance }
-        ]
+      const orderPayload = {
+        ...order,
+        paymentStatus,
+        paymentId,
+        deliveryCharges: order.deliveryCharges,
       };
 
-      const updatedWallets = { ...wallets, [userEmail]: updatedWallet };
-      setWallets(updatedWallets);
-      setStoredState(STATE_KEYS.WALLETS, updatedWallets);
+      setOrdersList((prev) => [orderPayload, ...prev.filter((o) => o.id !== order.id)]);
+      setActiveOrder(orderPayload);
+      lastOrderFingerprint.current = idempotencyKey;
+      lastOrderAt.current = Date.now();
 
-      const stockUpdated = productsList.map((product) => {
-        const purchased = cartItems.find((item) => item.productId === product.id);
-        if (!purchased) return product;
-        return { ...product, stock: Math.max(0, (product.stock || 0) - purchased.qty) };
-      });
-      setProductsList(stockUpdated);
-      setStoredState(STATE_KEYS.PRODUCTS, stockUpdated);
-
+      await reloadWallet(userEmail);
+      await reloadStore();
+      await clearCartOnServer();
       setCart({});
       setCartOpen(false);
       setAppliedCoupon(null);
       setRedeemedPointsInput(0);
       setCustomerSubTab("orders");
-
-      try {
-        await supabase.from("orders").insert([
-          {
-            id: orderPayload.id,
-            customer_email: orderPayload.customerEmail,
-            total_amount: orderPayload.totalAmount,
-            order_status: orderPayload.orderStatus,
-            payment_status: orderPayload.paymentStatus,
-            created_at: new Date().toISOString()
-          }
-        ]);
-      } catch {
-        console.log("Supabase insert skipped (running in local mode).");
-      }
     } catch (err: any) {
       setCheckoutError(err.message || "Checkout failed. Your card/UPI was not charged as paid.");
     } finally {
@@ -648,7 +618,9 @@ export default function Home() {
   };
 
   // Filter products by selected category and search query
-  const filteredProducts = productsList.filter((prod) => {
+  const activeVendorIds = new Set(vendorsList.filter((v) => v.status === "Active").map((v) => v.vendor_id));
+  const liveCatalog = productsList.filter((prod) => !prod.vendorId || activeVendorIds.has(prod.vendorId));
+  const filteredProducts = liveCatalog.filter((prod) => {
     const matchesCat = selectedCategory === "All" || prod.category === selectedCategory;
     const matchesSearch =
       prod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -657,13 +629,63 @@ export default function Home() {
     return matchesCat && matchesSearch;
   });
 
-  const bestSellerProducts = productsList.filter((p) => p.badge === "bestseller" || p.rating >= 4.8);
-  const seasonalProducts = productsList.filter((p) => p.isSeasonal);
-  const farmFreshProducts = productsList.filter((p) => p.isFarmFresh);
+  const renderProductGrid = (products: typeof liveCatalog) => (
+    <div className="products-grid">
+      {products.map((prod) => {
+        const itemQty = cart[prod.id] || 0;
+        return (
+          <div key={prod.id} className="product-card animate-fade-up">
+            <div className="product-image-wrap" onClick={() => setSelectedProduct(prod)} style={{ cursor: "pointer" }}>
+              <img src={prod.imageUrl || undefined} alt={prod.name} loading="lazy" />
+              {prod.badge && (
+                <span className={`badge ${prod.badge === "organic" ? "badge-organic" : "badge-bestseller"}`} style={{ position: "absolute", top: "10px", left: "10px", zIndex: 2 }}>
+                  {prod.badge === "organic" ? "🌿 Organic" : "🔥 Best Seller"}
+                </span>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); setWishlist((prev) => ({ ...prev, [prod.id]: !prev[prod.id] })); }}
+                style={{ position: "absolute", bottom: "10px", right: "10px", background: "rgba(255,255,255,0.9)", backdropFilter: "blur(4px)", border: "none", borderRadius: "50%", width: "34px", height: "34px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 2 }}
+              >
+                <Heart size={16} fill={wishlist[prod.id] ? "var(--danger)" : "none"} color={wishlist[prod.id] ? "var(--danger)" : "var(--text-3)"} />
+              </button>
+            </div>
+            <div className="product-body">
+              <span className="t-caption" style={{ fontSize: "11px" }}>{prod.unit}</span>
+              <h4 className="t-product" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "38px" }}>
+                {prod.name}
+              </h4>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <Star size={13} fill="#EAB308" color="#EAB308" />
+                <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)" }}>{prod.rating}</span>
+                {prod.reviewsCount ? <span style={{ fontSize: "11px", color: "var(--text-4)" }}>({prod.reviewsCount})</span> : null}
+              </div>
+              <div className="product-qty-row">
+                <div>
+                  <span style={{ fontWeight: 800, fontSize: "16px", color: "var(--text)" }}>₹{prod.price}</span>
+                  {prod.oldPrice && <span style={{ textDecoration: "line-through", fontSize: "12px", color: "var(--text-4)", marginLeft: "4px" }}>₹{prod.oldPrice}</span>}
+                </div>
+                {itemQty > 0 ? (
+                  <div className="qty-stepper">
+                    <button className="qty-btn" onClick={() => removeFromCart(prod.id)}>−</button>
+                    <span className="qty-count">{itemQty}</span>
+                    <button className="qty-btn" onClick={() => addToCart(prod.id)}>+</button>
+                  </div>
+                ) : (
+                  <button className="add-btn" onClick={() => addToCart(prod.id)} disabled={isOutOfRange}>
+                    <Plus size={14} /> Add
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   const totalCartItemsCount = Object.values(cart).reduce((a, b) => a + b, 0);
 
-  if (!mounted) return null;
+  if (!mounted) return <AppLoadingShell label="Loading marketplace…" />;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "var(--bg)" }}>
@@ -672,16 +694,8 @@ export default function Home() {
       <header className="desktop-header">
         <div className="desktop-header-inner">
           {/* Brand Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", flexShrink: 0 }} onClick={() => handleNavClick("catalog")}>
-            <div style={{ width: "42px", height: "42px", borderRadius: "12px", background: "var(--accent)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", fontWeight: 800, boxShadow: "var(--shadow-green)" }}>
-              🥬
-            </div>
-            <div>
-              <h1 style={{ fontSize: "1.2rem", fontWeight: 900, letterSpacing: "-0.5px", margin: 0, color: "var(--accent)", lineHeight: 1.1 }}>
-                SABJIWALAA ५
-              </h1>
-              <span className="t-label" style={{ fontSize: "10px", color: "var(--text-3)", letterSpacing: "0.5px" }}>Organic Hyperlocal Market</span>
-            </div>
+          <div style={{ display: "flex", alignItems: "center", cursor: "pointer", flexShrink: 0 }} onClick={() => handleNavClick("catalog")}>
+            <BrandLogo height={48} priority />
           </div>
 
           {/* Location Trigger Pill */}
@@ -695,17 +709,17 @@ export default function Home() {
           </div>
 
           {/* Apple-Style Search Bar */}
-          <div style={{ flex: 1, maxWidth: "460px", marginInline: "16px", position: "relative" }}>
-            <Search size={18} style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "var(--text-4)" }} />
-            <input
-              type="text"
-              placeholder="Search fresh spinach, mangoes, milk..."
+          <div style={{ flex: 1, maxWidth: "460px", marginInline: "16px" }}>
+            <SearchBarWithRecommendations
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); if (customerSubTab !== "catalog") setCustomerSubTab("catalog"); }}
-              className="search-bar-premium"
-              style={{ paddingRight: "40px" }}
+              onChange={setSearchQuery}
+              onFocusCatalog={() => { if (customerSubTab !== "catalog") setCustomerSubTab("catalog"); }}
+              onSelectProduct={(productId) => {
+                const product = liveCatalog.find((p) => p.id === productId);
+                if (product) setSelectedProduct(product);
+              }}
+              onSelectCategory={(categoryName) => setSelectedCategory(categoryName)}
             />
-            <Mic size={16} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-4)", cursor: "pointer" }} onClick={() => alert("Voice search listening...")} />
           </div>
 
           {/* Nav Actions */}
@@ -739,18 +753,15 @@ export default function Home() {
             ) : (
             <button onClick={() => { setLoginRequiredFor("account"); setShowLoginModal(true); }} className="btn btn-green-outline" style={{ padding: "8px 16px", fontSize: "13px" }}>Sign In</button>
             )}
+            <PortalNav role={userRole} current="storefront" compact />
           </div>
         </div>
       </header>
 
       {/* ═══════ 2. MOBILE TOP APP BAR ═══════ */}
       <header className="mobile-app-bar">
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }} onClick={() => handleNavClick("catalog")}>
-          <span style={{ fontSize: "1.8rem" }}>🥬</span>
-          <div>
-            <span style={{ fontSize: "16px", fontWeight: 900, color: "var(--accent)", lineHeight: 1 }}>SABJIWALAA ५</span>
-            <span style={{ display: "block", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--text-3)", fontWeight: 700 }}>Farm Fresh Organic</span>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", cursor: "pointer" }} onClick={() => handleNavClick("catalog")}>
+          <BrandLogo height={36} priority />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div style={{ position: "relative", cursor: "pointer" }} onClick={() => setNotificationBellOpen(!notificationBellOpen)}>
@@ -764,23 +775,24 @@ export default function Home() {
           ) : (
             <button onClick={() => { setLoginRequiredFor("account"); setShowLoginModal(true); }} className="btn btn-primary" style={{ padding: "6px 14px", fontSize: "12px", height: "34px", borderRadius: "var(--r-md)" }}>Sign In</button>
           )}
+          {userRole && userRole !== "CUSTOMER" && <PortalNav role={userRole} current="storefront" compact />}
         </div>
       </header>
 
       {/* ═══════ 3. MOBILE STICKY APPLE SEARCH ═══════ */}
       <div className="mobile-search-sticky">
-        <div style={{ position: "relative", width: "100%" }}>
-          <Search size={17} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-4)" }} />
-          <input
-            type="text"
-            placeholder="Search organic fruits, vegetables..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); if (customerSubTab !== "catalog") setCustomerSubTab("catalog"); }}
-            className="search-bar-premium"
-            style={{ height: "44px", fontSize: "14px" }}
-          />
-          <Mic size={17} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-4)", cursor: "pointer" }} onClick={() => alert("Voice search activated")} />
-        </div>
+        <SearchBarWithRecommendations
+          compact
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search organic fruits, vegetables..."
+          onFocusCatalog={() => { if (customerSubTab !== "catalog") setCustomerSubTab("catalog"); }}
+          onSelectProduct={(productId) => {
+            const product = liveCatalog.find((p) => p.id === productId);
+            if (product) setSelectedProduct(product);
+          }}
+          onSelectCategory={(categoryName) => setSelectedCategory(categoryName)}
+        />
       </div>
 
       {/* ═══════ NOTIFICATION DROPDOWN ═══════ */}
@@ -850,6 +862,16 @@ export default function Home() {
                 </div>
               )}
 
+              {platformSettings.maintenanceMode && (
+                <div style={{ background: "#FFF7ED", border: "1px solid rgba(234,88,12,0.25)", borderRadius: "var(--r-xl)", padding: "16px 20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                  <AlertTriangle size={22} color="#C2410C" />
+                  <div>
+                    <strong style={{ color: "#C2410C", fontSize: "14px" }}>Storefront maintenance</strong>
+                    <p style={{ fontSize: "13px", color: "var(--text-2)", margin: "2px 0 0" }}>The administrator has paused checkout. You can still browse the catalog.</p>
+                  </div>
+                </div>
+              )}
+
               {/* Trust Badges Strip */}
               <div className="trust-strip" style={{ animation: "fadeUp 0.5s var(--ease) both", animationDelay: "120ms" }}>
                 {[
@@ -875,7 +897,11 @@ export default function Home() {
                 </div>
                 <div className="category-rail-container">
                   <div className="category-rail">
-                    {INITIAL_CATEGORIES.map((cat) => (
+                    {[{ id: "All", label: "All Items", imageUrl: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80" }, ...dbCategories.map((cat) => ({
+                      id: cat.name,
+                      label: cat.name,
+                      imageUrl: cat.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80",
+                    }))].map((cat) => (
                       <button
                         key={cat.id}
                         onClick={() => setSelectedCategory(cat.id)}
@@ -891,67 +917,25 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 🌟 BEST SELLERS SECTION 🌟 */}
-              {selectedCategory === "All" && (
-                <div style={{ animation: "fadeUp 0.5s var(--ease) both", animationDelay: "200ms" }}>
+              {selectedCategory === "All" && storefrontSections.map((section, index) => (
+                <div key={section.id} style={{ animation: "fadeUp 0.5s var(--ease) both", animationDelay: `${200 + index * 40}ms` }}>
                   <div className="section-header">
                     <div>
-                      <span className="badge badge-bestseller" style={{ marginBottom: "4px" }}>🔥 Popular Demand</span>
-                      <h3 style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.02em" }}>Best Sellers</h3>
+                      {section.sectionType === "BEST_SELLERS" && (
+                        <span className="badge badge-bestseller" style={{ marginBottom: "4px" }}>🔥 Popular Demand</span>
+                      )}
+                      <h3 style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.02em" }}>{section.name}</h3>
                     </div>
-                    <span className="t-caption">Top rated items</span>
+                    <span className="t-caption">{section.products.length} items</span>
                   </div>
-                  <div className="products-grid">
-                    {bestSellerProducts.map((prod) => {
-                      const itemQty = cart[prod.id] || 0;
-                      return (
-                        <div key={prod.id} className="product-card animate-fade-up">
-                          <div className="product-image-wrap" onClick={() => setSelectedProduct(prod)} style={{ cursor: "pointer" }}>
-                            <img src={prod.imageUrl} alt={prod.name} loading="lazy" />
-                            {prod.badge && (
-                              <span className={`badge ${prod.badge === "organic" ? "badge-organic" : "badge-bestseller"}`} style={{ position: "absolute", top: "10px", left: "10px", zIndex: 2 }}>
-                                {prod.badge === "organic" ? "🌿 Organic" : "🔥 Best Seller"}
-                              </span>
-                            )}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setWishlist((prev) => ({ ...prev, [prod.id]: !prev[prod.id] })); }}
-                              style={{ position: "absolute", bottom: "10px", right: "10px", background: "rgba(255,255,255,0.9)", backdropFilter: "blur(4px)", border: "none", borderRadius: "50%", width: "34px", height: "34px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 2 }}
-                            >
-                              <Heart size={16} fill={wishlist[prod.id] ? "var(--danger)" : "none"} color={wishlist[prod.id] ? "var(--danger)" : "var(--text-3)"} />
-                            </button>
-                          </div>
-                          <div className="product-body">
-                            <span className="t-caption" style={{ fontSize: "11px" }}>{prod.unit}</span>
-                            <h4 className="t-product" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "38px" }}>
-                              {prod.name}
-                            </h4>
-                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                              <Star size={13} fill="#EAB308" color="#EAB308" />
-                              <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)" }}>{prod.rating}</span>
-                              <span style={{ fontSize: "11px", color: "var(--text-4)" }}>({prod.reviewsCount})</span>
-                            </div>
-                            <div className="product-qty-row">
-                              <div>
-                                <span style={{ fontWeight: 800, fontSize: "16px", color: "var(--text)" }}>₹{prod.price}</span>
-                                {prod.oldPrice && <span style={{ textDecoration: "line-through", fontSize: "12px", color: "var(--text-4)", marginLeft: "4px" }}>₹{prod.oldPrice}</span>}
-                              </div>
-                              {itemQty > 0 ? (
-                                <div className="qty-stepper">
-                                  <button className="qty-btn" onClick={() => removeFromCart(prod.id)}>−</button>
-                                  <span className="qty-count">{itemQty}</span>
-                                  <button className="qty-btn" onClick={() => addToCart(prod.id)}>+</button>
-                                </div>
-                              ) : (
-                                <button className="add-btn" onClick={() => addToCart(prod.id)} disabled={isOutOfRange}>
-                                  <Plus size={14} /> Add
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {renderProductGrid(section.products)}
+                </div>
+              ))}
+
+              {selectedCategory === "All" && storefrontSections.length === 0 && (
+                <div className="card-premium" style={{ padding: "28px", textAlign: "center", marginBottom: "20px" }}>
+                  <p style={{ fontWeight: 700, marginBottom: "6px" }}>Storefront sections are not configured yet</p>
+                  <p className="t-caption">Active sections from the Admin Panel will appear here once they are created.</p>
                 </div>
               )}
 
@@ -1252,9 +1236,9 @@ export default function Home() {
                           <span className={`status-pill ${order.orderStatus === "Delivered" ? "status-delivered" : order.orderStatus === "Cancelled" ? "status-cancelled" : "status-pending"}`}>
                             {order.orderStatus}
                           </span>
-                          <button onClick={() => setSelectedOrderDetails(order)} className="btn btn-secondary" style={{ fontSize: "12px", padding: "6px 12px" }}>
+                          <a href={`/orders/${order.id}/receipt`} className="btn btn-secondary" style={{ fontSize: "12px", padding: "6px 12px", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                             <Eye size={14} /> Receipt
-                          </button>
+                          </a>
                         </div>
                       </div>
                     ))
@@ -1272,16 +1256,20 @@ export default function Home() {
             wallets={wallets}
             addresses={addresses}
             setAddresses={setAddresses}
-            handleAddAddress={(tag, text) => {
-              const newAddr = {
-                id: `a_${Date.now()}`,
-                tag: tag,
-                address: text,
-                lat: customerCoords.lat,
-                lng: customerCoords.lng,
-                isDefault: addresses.length === 0
-              };
-              setAddresses((prev) => [...prev, newAddr]);
+            handleAddAddress={async (tag, text) => {
+              if (!userEmail) return;
+              try {
+                const saved = await saveAddress({
+                  tag,
+                  address: text,
+                  lat: customerCoords.lat,
+                  lng: customerCoords.lng,
+                  isDefault: addresses.length === 0,
+                });
+                setAddresses((prev) => [...prev, saved]);
+              } catch (err: any) {
+                alert(err.message || "Unable to save address");
+              }
             }}
             handleDeleteAddress={handleDeleteAddress}
             handleSetDefaultAddress={handleSetDefaultAddress}
@@ -1401,12 +1389,12 @@ export default function Home() {
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Delivery Charge</span>
-                    <span>{getCartTotal() - getCouponDiscount() > 200 || getCartTotal() === 0 ? <strong style={{ color: "var(--accent)" }}>FREE</strong> : `₹${deliveryCharge}`}</span>
+                    <span>{getCartTotal() - getCouponDiscount() > platformSettings.freeDeliveryThreshold || getCartTotal() === 0 ? <strong style={{ color: "var(--accent)" }}>FREE</strong> : `₹${deliveryCharge}`}</span>
                   </div>
                   <div className="divider" style={{ margin: "4px 0" }} />
                   <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: "18px", color: "var(--accent)" }}>
                     <span>Grand Total</span>
-                    <span>₹{Math.max(0, getCartTotal() - getCouponDiscount()) + (getCartTotal() - getCouponDiscount() > 200 || getCartTotal() === 0 ? 0 : deliveryCharge)}</span>
+                    <span>₹{Math.max(0, getCartTotal() - getCouponDiscount()) + (getCartTotal() - getCouponDiscount() > platformSettings.freeDeliveryThreshold || getCartTotal() === 0 ? 0 : deliveryCharge)}</span>
                   </div>
                 </div>
               </div>
@@ -1419,7 +1407,7 @@ export default function Home() {
             {checkoutError && <p style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "10px" }}>{checkoutError}</p>}
             <button
               onClick={handlePlaceOrder}
-              disabled={placingOrder || isOutOfRange}
+              disabled={placingOrder || isOutOfRange || platformSettings.maintenanceMode}
               className="btn btn-primary"
               style={{ width: "100%", padding: "16px", fontSize: "16px", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-green)", minHeight: "48px" }}
             >
@@ -1433,8 +1421,10 @@ export default function Home() {
       {showLoginModal && (
         <div className="modal-overlay" onClick={() => setShowLoginModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <span style={{ fontSize: "3.2rem", display: "block", marginBottom: "16px" }}>🥬</span>
-            <h3 style={{ fontWeight: 900, fontSize: "24px", color: "var(--text)" }}>Welcome to SABJIWALAA ५</h3>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
+              <BrandLogo height={72} />
+            </div>
+            <h3 style={{ fontWeight: 900, fontSize: "24px", color: "var(--text)" }}>Welcome</h3>
             <p style={{ color: "var(--text-3)", margin: "8px 0 24px", fontSize: "14px", lineHeight: 1.5 }}>
               Sign in to access <strong>{loginRequiredFor || "your account"}</strong>, earn rewards, and track deliveries.
             </p>
@@ -1456,6 +1446,7 @@ export default function Home() {
             >
               Continue with Google
             </button>
+            <StaffLoginLinks />
           </div>
         </div>
       )}
@@ -1495,6 +1486,16 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* ═══════ STAFF PORTAL LINKS ═══════ */}
+      <footer style={{ padding: "16px 16px calc(88px + env(safe-area-inset-bottom))", textAlign: "center" }}>
+        <p style={{ margin: "0 0 8px", fontSize: "0.8rem" }}>
+          <a href="/download" style={{ color: "var(--accent)", fontWeight: 800, textDecoration: "none" }}>Android app download</a>
+          {" · "}
+          <a href="/apps" style={{ color: "var(--accent)", fontWeight: 800, textDecoration: "none" }}>Open apps</a>
+        </p>
+        <StaffLoginLinks compact />
+      </footer>
 
       {/* ═══════ STICKY BOTTOM NAV ═══════ */}
       <nav className="bottom-nav">

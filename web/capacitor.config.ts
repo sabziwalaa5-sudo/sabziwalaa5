@@ -29,7 +29,9 @@ const config: CapacitorConfig = {
       "checkout.razorpay.com",
       "api.razorpay.com",
     ],
-    url: liveServerUrl || "https://web-sabziwalaa5.vercel.app",
+    // Storefront is always deployed. /app 404s on stale production deploys and
+    // that is what the installed APK showed after download.
+    url: liveServerUrl || "https://web-sabziwalaa5.vercel.app/",
   },
   plugins: {
     SplashScreen: {

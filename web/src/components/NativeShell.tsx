@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { shouldRegisterServiceWorker } from "../lib/platform";
+import { isNativeRuntime, shouldRegisterServiceWorker } from "../lib/platform";
+import { isSupabaseReachable } from "../lib/supabaseConfig";
 
 export default function NativeShell() {
   const [offline, setOffline] = useState(false);
+  const [native, setNative] = useState(false);
+  const [path, setPath] = useState("");
+  const [authDown, setAuthDown] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -16,8 +20,13 @@ export default function NativeShell() {
     };
 
     applyNetwork();
+    setNative(isNativeRuntime());
+    setPath(window.location.pathname);
     window.addEventListener("online", applyNetwork);
     window.addEventListener("offline", applyNetwork);
+    isSupabaseReachable().then((ok) => {
+      if (!cancelled) setAuthDown(!ok);
+    });
 
     (async () => {
       try {
@@ -37,12 +46,27 @@ export default function NativeShell() {
         const backListener = await App.addListener("backButton", ({ canGoBack }) => {
           if (canGoBack) {
             window.history.back();
+          } else if (window.location.pathname !== "/" && window.location.pathname !== "/apps") {
+            window.location.assign("/");
           } else {
             App.exitApp();
           }
         });
 
-        if (cancelled) backListener.remove();
+        const urlListener = await App.addListener("appUrlOpen", ({ url }) => {
+          try {
+            const parsed = new URL(url);
+            const path = parsed.pathname && parsed.pathname !== "/" ? parsed.pathname : parsed.host ? `/${parsed.host}` : "/";
+            window.location.assign(path + parsed.search);
+          } catch {
+            // Ignore malformed deep links.
+          }
+        });
+
+        if (cancelled) {
+          backListener.remove();
+          urlListener.remove();
+        }
       } catch {
         // Web runtime without Capacitor plugins.
       }
@@ -67,9 +91,12 @@ export default function NativeShell() {
     };
   }, []);
 
-  if (!offline) return null;
+  const showApps = native && path !== "/apps";
+  if (!offline && !showApps && !authDown) return null;
 
   return (
+    <>
+      {offline && (
     <div
       role="status"
       style={{
@@ -86,5 +113,46 @@ export default function NativeShell() {
     >
       You are offline. Cart and checkout need a network connection for payments.
     </div>
+      )}
+      {authDown && !offline && (
+        <div
+          role="status"
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 4000,
+            background: "#92400e",
+            color: "white",
+            textAlign: "center",
+            padding: "8px 12px",
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          Sign-in server is unreachable. You can still browse the shop without logging in.
+        </div>
+      )}
+      {showApps && (
+        <a
+          href="/apps"
+          style={{
+            position: "fixed",
+            top: "calc(10px + env(safe-area-inset-top))",
+            right: 12,
+            zIndex: 4001,
+            background: "#14532d",
+            color: "white",
+            textDecoration: "none",
+            fontSize: 12,
+            fontWeight: 800,
+            padding: "8px 12px",
+            borderRadius: 999,
+            boxShadow: "0 8px 20px rgba(20,83,45,0.35)",
+          }}
+        >
+          Apps
+        </a>
+      )}
+    </>
   );
 }

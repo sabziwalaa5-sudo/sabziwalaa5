@@ -1,10 +1,23 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import NativeShell from "../components/NativeShell";
+import OpsBanner from "../components/OpsBanner";
 
 export const metadata: Metadata = {
   title: "SABJIWALAA ५ - Hyperlocal Organic Grocery Marketplace",
-  description: "Next-gen hyperlocal vegetable and grocery marketplace with sub-minute routing and real-time live order tracking.",
+  description: "Fresh organic produce delivered from local farms. Shop vegetables, fruits, dairy, and staples with live order tracking.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://web-sabziwalaa5.vercel.app"),
+  openGraph: {
+    title: "SABJIWALAA ५",
+    description: "Hyperlocal organic grocery marketplace",
+    type: "website",
+    locale: "en_IN",
+    images: [{ url: "/images/logo.png", width: 1024, height: 558, alt: "SABZIWALAA ५ — Freshly Delivered" }],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
   appleWebApp: {
     capable: true,
     title: "Sabjiwala",
@@ -44,11 +57,14 @@ export default function RootLayout({
           defer
         ></script>
         <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" href="/favicon.png" />
+        <link rel="apple-touch-icon" href="/images/logo.png" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body>
         <NativeShell />
+        <OpsBanner />
         {children}
       </body>
     </html>

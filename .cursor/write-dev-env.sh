@@ -23,7 +23,8 @@ upsert_env_file() {
 
 upsert_env_file "$ROOT/web/.env.local" \
   "NEXT_PUBLIC_APP_URL=http://localhost:3001" \
-  "PAYMENT_HMAC_SECRET=dev-hmac-secret-change-me"
+  "PAYMENT_HMAC_SECRET=dev-hmac-secret-change-me" \
+  "DATABASE_URL=postgresql://sabjiwala_user:sabjiwala_password@localhost:5432/sabjiwala5_db?schema=public"
 
 upsert_env_file "$ROOT/backend/.env" \
   "PORT=4000" \

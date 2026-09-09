@@ -4,7 +4,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { Eye, Shield, Clock, MapPin, Truck, Check, X, ArrowLeft, DollarSign, List, ToggleLeft, ToggleRight, Info } from "lucide-react";
-import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_ORDERS } from "../../lib/sharedState";
+import { useSabjiwalaStore } from "../../hooks/useSabjiwalaStore";
+import { updateOrderStatusOnServer } from "../../lib/storeApi";
+import { resolveUserRole } from "../../lib/resolveRole";
+import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
+import AppLoadingShell from "../../components/AppLoadingShell";
+import { BrandLogo } from "../../components/BrandLogo";
+import { logger } from "../../lib/logger";
+import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
+import { canAccessPortal } from "../../lib/roles";
 
 export default function RiderPortal() {
   const [mounted, setMounted] = useState(false);
@@ -21,9 +29,7 @@ export default function RiderPortal() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
-  // Shared States from localStorage
-  const [vendorsList, setVendorsList] = useState(() => getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-  const [ordersList, setOrdersList] = useState(() => getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
+  const { vendorsList, ordersList, setOrdersList } = useSabjiwalaStore({ staff: true });
 
   // Rider position tracking state
   const [driverPosition, setDriverPosition] = useState<{ lat: number; lng: number } | null>(null);
@@ -35,15 +41,14 @@ export default function RiderPortal() {
 
   useEffect(() => {
     setMounted(true);
-    const syncState = () => {
-      setVendorsList(getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-      setOrdersList(getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
-    };
 
-    window.addEventListener("sabjiwala_state_update", syncState);
-    window.addEventListener("storage", syncState);
+    fetchStaffSession().then((session) => {
+      if (session && canAccessPortal(session.role, "rider")) {
+        setUserEmail(session.email);
+        setUserRole(session.role);
+      }
+    });
 
-    // Check session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         verifySessionRole(session.user);
@@ -53,15 +58,10 @@ export default function RiderPortal() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         verifySessionRole(session.user);
-      } else {
-        setUserEmail(null);
-        setUserRole(null);
       }
     });
 
     return () => {
-      window.removeEventListener("sabjiwala_state_update", syncState);
-      window.removeEventListener("storage", syncState);
       subscription.unsubscribe();
     };
   }, []);
@@ -120,40 +120,7 @@ export default function RiderPortal() {
 
   const verifySessionRole = async (user: any) => {
     const email = user.email || "";
-    let role = "CUSTOMER";
-
-    if (email.toLowerCase() === "sabziwalaa5@gmail.com") {
-      role = "ADMIN";
-    } else if (email.toLowerCase() === "raman@gmail.com") {
-      role = "VENDOR";
-    } else if (email.toLowerCase() === "rider@gmail.com" || email.toLowerCase() === "delivery@gmail.com") {
-      role = "DELIVERY_PARTNER";
-    } else {
-      try {
-        // Try querying 'profiles' first (MVP schema)
-        const { data: profileMvp } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (profileMvp?.role) {
-          role = profileMvp.role.toUpperCase();
-        } else {
-          // Fallback to 'users' table (production schema)
-          const { data: profileProd } = await supabase
-            .from("users")
-            .select("role")
-            .eq("uid", user.id)
-            .maybeSingle();
-          if (profileProd?.role) {
-            role = profileProd.role.toUpperCase();
-          }
-        }
-      } catch (e) {
-        console.error("Error checking role", e);
-      }
-    }
+    const role = await resolveUserRole(user);
 
     if (role === "DELIVERY_PARTNER" || role === "ADMIN") {
       setUserEmail(email);
@@ -171,13 +138,21 @@ export default function RiderPortal() {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginPassword
-      });
-      if (error) throw error;
-    } catch (err: any) {
-      setAuthError(err.message || "Invalid login credentials.");
+      const staff = await loginStaffPortal(loginEmail, loginPassword, "rider");
+      setUserEmail(staff.email);
+      setUserRole(staff.role);
+    } catch (staffErr: any) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: loginPassword
+        });
+        if (error) throw error;
+        if (data.user) await verifySessionRole(data.user);
+      } catch (err: any) {
+        setAuthError(staffErr.message || err.message || "Invalid login credentials.");
+      }
+    } finally {
       setAuthLoading(false);
     }
   };
@@ -185,9 +160,10 @@ export default function RiderPortal() {
   const handleSignOut = async () => {
     setAuthLoading(true);
     try {
+      await logoutStaffPortal();
       await supabase.auth.signOut();
     } catch (e) {
-      console.error(e);
+      logger.error("Rider auth error", e);
     } finally {
       setUserEmail(null);
       setUserRole(null);
@@ -196,10 +172,9 @@ export default function RiderPortal() {
   };
 
   // Status transition handler
-  const updateOrderStatus = (orderId: string, newStatus: string) => {
-    const updated = ordersList.map(o => o.id === orderId ? { ...o, orderStatus: newStatus } : o);
-    setOrdersList(updated);
-    setStoredState(STATE_KEYS.ORDERS, updated);
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    const updated = await updateOrderStatusOnServer(orderId, newStatus);
+    setOrdersList((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
   };
 
   const getActiveRiderOrders = () => {
@@ -211,7 +186,7 @@ export default function RiderPortal() {
   };
 
   if (!mounted) {
-    return <div style={{ minHeight: "100vh", background: "#ffffff" }} />;
+    return <AppLoadingShell label="Opening rider terminal…" />;
   }
 
   return (
@@ -221,9 +196,11 @@ export default function RiderPortal() {
         <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", padding: "2rem" }}>
           <div className="card" style={{ maxWidth: "450px", width: "100%", padding: "2.5rem", borderRadius: "16px", backgroundColor: "white", boxShadow: "0 10px 30px rgba(0,0,0,0.08)" }}>
             <div style={{ textAlign: "center", marginBlockEnd: "2rem" }}>
-              <span style={{ fontSize: "3rem" }}>🛵</span>
-              <h2 style={{ fontWeight: "900", fontSize: "1.6rem", marginBlockStart: "0.5rem" }}>SABJIWALAA ५</h2>
-              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Delivery Agent / Rider Terminal</p>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.75rem" }}>
+                <BrandLogo height={72} />
+              </div>
+              <span style={{ fontSize: "2rem" }}>🛵</span>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginBlockStart: "0.5rem" }}>Delivery Agent / Rider Terminal</p>
             </div>
 
             {authError && (
@@ -256,6 +233,9 @@ export default function RiderPortal() {
                   onChange={(e) => setLoginPassword(e.target.value)}
                   style={{ padding: "0.6rem 1rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.9rem" }}
                 />
+                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0.35rem 0 0" }}>
+                  Use your assigned rider email and staff PIN.
+                </p>
               </div>
 
               <button
@@ -272,6 +252,7 @@ export default function RiderPortal() {
               <a href="/" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: "600", textDecoration: "none" }}>
                 <ArrowLeft size={16} /> Back to Grocery Marketplace
               </a>
+              <StaffLoginLinks />
             </div>
           </div>
         </div>
@@ -288,7 +269,8 @@ export default function RiderPortal() {
               </div>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+              <PortalNav role={userRole === "ADMIN" || userRole === "DELIVERY_PARTNER" ? (userRole as "ADMIN" | "DELIVERY_PARTNER") : null} current="rider" compact />
               {/* Online/Offline availability toggle */}
               <button
                 onClick={() => setIsOnline(!isOnline)}

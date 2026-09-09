@@ -24,6 +24,12 @@ import {
   registerOrderFingerprint,
 } from "../lib/orderEngine";
 import { createPaymentClaims, readClaims, signClaims } from "../lib/payments";
+import { canAccessPortal, normalizeRole, portalPathForRole, roleFromEmail } from "../lib/roles";
+import { INITIAL_SETTINGS, pointsEarnedForOrder, rupeesFromPoints } from "../lib/platformSettings";
+import { getAdminWebHref, MOBILE_APP_PATH } from "../lib/config";
+import { MOBILE_ROLES, isMobileRoleId, roleById, ANDROID_APK_PATH, MOBILE_DOWNLOAD_PATH } from "../lib/mobileApp";
+import { isSupabaseConfigured } from "../lib/supabaseConfig";
+import { authorizeStaffLogin, DEFAULT_STAFF_BOOTSTRAP_PASSWORD, readStaffSession, signStaffSession } from "../lib/staffAuth";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -172,6 +178,60 @@ assert(readClaims(`${body}.${flipped}`) === null, "Tampered checkout token is re
 assert(readClaims("not-a-token") === null, "Garbage checkout token is rejected");
 const upiClaims = createPaymentClaims({ orderDraftId: "SBJ124", amountRupees: 200, method: "UPI" });
 assert(signClaims(upiClaims).includes("."), "UPI checkout token is HMAC-signed");
+
+console.log("\n--- Testing Admin Web Role Routing ---");
+assert(roleFromEmail("sabziwalaa5@gmail.com") === "ADMIN", "Platform owner email maps to ADMIN");
+assert(roleFromEmail("raman@gmail.com") === "VENDOR", "Merchant email maps to VENDOR");
+assert(roleFromEmail("rider@gmail.com") === "DELIVERY_PARTNER", "Rider email maps to DELIVERY_PARTNER");
+assert(roleFromEmail("shopper@gmail.com") === null, "Unknown email does not force a staff role");
+assert(portalPathForRole("ADMIN") === "/admin", "Admin role opens the admin web portal");
+assert(getAdminWebHref() === "/admin" || getAdminWebHref().endsWith("/admin"), "Admin web href resolves to the admin portal");
+assert(portalPathForRole("VENDOR") === "/vendor", "Vendor role opens the vendor portal");
+assert(portalPathForRole("DELIVERY_PARTNER") === "/rider", "Rider role opens the rider portal");
+assert(canAccessPortal("ADMIN", "admin") === true, "Admin can open the admin portal");
+assert(canAccessPortal("VENDOR", "admin") === false, "Vendor cannot open the admin portal");
+assert(canAccessPortal("ADMIN", "vendor") === true, "Admin can inspect the vendor portal");
+assert(normalizeRole("merchant") === "VENDOR", "Merchant alias normalizes to VENDOR");
+assert(normalizeRole("rider") === "DELIVERY_PARTNER", "Rider alias normalizes to DELIVERY_PARTNER");
+
+console.log("\n--- Testing Admin Settings Applied to Storefront ---");
+const paused = { ...INITIAL_SETTINGS, maintenanceMode: true };
+assert(paused.maintenanceMode === true, "Admin maintenance flag is available to the storefront");
+assert(pointsEarnedForOrder(250, INITIAL_SETTINGS) === 12, "Admin earning rate of 5 pts / ₹100 yields 12 points on ₹250");
+assert(pointsEarnedForOrder(250, { ...INITIAL_SETTINGS, rewardSettings: { ...INITIAL_SETTINGS.rewardSettings, enabled: false } }) === 0, "Disabled rewards earn no points");
+assert(rupeesFromPoints(10, INITIAL_SETTINGS) === 10, "Default point value is ₹1 per point");
+assert(rupeesFromPoints(10, { ...INITIAL_SETTINGS, rewardSettings: { ...INITIAL_SETTINGS.rewardSettings, pointValue: 0.5 } }) === 5, "Admin point value converts points to rupees");
+
+console.log("\n--- Testing Mobile App Launcher ---");
+assert(MOBILE_APP_PATH === "/apps", "Mobile app home is /apps");
+assert(MOBILE_ROLES.length === 4, "Launcher exposes customer, admin, vendor, and rider");
+assert(MOBILE_ROLES.map((r) => r.id).join(",") === "customer,admin,vendor,rider", "Role order is customer → admin → vendor → rider");
+assert(roleById("admin")?.href === "/admin", "Admin role opens the admin web portal from the app");
+assert(isMobileRoleId("rider") === true, "Rider is a valid mobile role");
+assert(isMobileRoleId("hacker") === false, "Unknown roles are rejected");
+assert(ANDROID_APK_PATH === "/downloads/sabjiwala.apk", "Android APK is hosted on the site");
+assert(MOBILE_DOWNLOAD_PATH === "/download", "Download page is /download");
+
+console.log("\n--- Testing Auth Host Configuration ---");
+process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_test_key";
+assert(isSupabaseConfigured("https://example-project.supabase.co") === true, "Valid Supabase host with key is accepted");
+assert(isSupabaseConfigured("https://placeholder-project.supabase.co") === false, "Placeholder Supabase host is rejected");
+assert(isSupabaseConfigured("not-a-url") === false, "Invalid URL is rejected");
+delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+console.log("\n--- Testing Staff Portal Bootstrap ---");
+const adminOk = authorizeStaffLogin({ email: "sabziwalaa5@gmail.com", password: DEFAULT_STAFF_BOOTSTRAP_PASSWORD, portal: "admin" });
+assert("session" in adminOk && adminOk.session.role === "ADMIN", "Admin email opens the admin portal");
+const vendorDenied = authorizeStaffLogin({ email: "raman@gmail.com", password: DEFAULT_STAFF_BOOTSTRAP_PASSWORD, portal: "admin" });
+assert("error" in vendorDenied, "Vendor cannot open the admin portal");
+const riderOk = authorizeStaffLogin({ email: "rider@gmail.com", password: DEFAULT_STAFF_BOOTSTRAP_PASSWORD, portal: "rider" });
+assert("session" in riderOk, "Rider email opens the rider portal");
+const badPass = authorizeStaffLogin({ email: "sabziwalaa5@gmail.com", password: "wrong", portal: "admin" });
+assert("error" in badPass, "Wrong staff PIN is rejected");
+if ("session" in adminOk) {
+  const roundTrip = readStaffSession(signStaffSession(adminOk.session));
+  assert(roundTrip?.email === "sabziwalaa5@gmail.com", "Staff session cookie round-trips");
+}
 
 console.log(`\n─────────────────────────────────────────────────────────`);
 console.log(`📊 Verification Complete: ${passedTests}/${totalTests} checks passed.`);

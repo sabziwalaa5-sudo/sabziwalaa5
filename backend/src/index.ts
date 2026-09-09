@@ -5,19 +5,15 @@ import dotenv from "dotenv";
 import { setupSockets } from "./socket";
 import { OrderController } from "./controllers/order.controller";
 import { lockOrderFingerprint, PaymentController } from "./controllers/payment.controller";
+import { applySecurityHeaders, getAllowedOrigins, productionErrorHandler } from "./security";
 
 dotenv.config();
 
 const app = express();
-const allowedOrigins = [
-  "https://web-sabziwalaa5.vercel.app",
-  "http://localhost:3000",
-  "http://localhost:3001",
-  "capacitor://localhost",
-  "https://localhost",
-  "http://localhost",
-];
+const allowedOrigins = getAllowedOrigins();
 
+app.disable("x-powered-by");
+app.use(applySecurityHeaders);
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -38,7 +34,7 @@ app.use((req, res, next) => {
 });
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "healthy", timestamp: new Date() });
+  res.json({ status: "healthy", timestamp: new Date().toISOString() });
 });
 
 const mockDb = {
@@ -90,10 +86,15 @@ app.post("/api/payments/create", PaymentController.create);
 app.post("/api/payments/verify", PaymentController.verify);
 app.post("/api/payments/webhook", PaymentController.webhook);
 
+app.use(productionErrorHandler);
+
 const server = http.createServer(app);
 setupSockets(server);
 
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => {
-  console.log(`[Sabjiwala 5 Backend] Running on http://localhost:${PORT}`);
+const HOST = process.env.HOST || "0.0.0.0";
+server.listen(Number(PORT), HOST, () => {
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[Sabjiwala Backend] Listening on ${HOST}:${PORT}`);
+  }
 });

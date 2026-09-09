@@ -28,11 +28,18 @@ async function main() {
     rewardEnabled: true,
     rewardEarningRate: 5 as unknown as import("@prisma/client").Prisma.Decimal,
     rewardPointValue: 1 as unknown as import("@prisma/client").Prisma.Decimal,
+    businessName: null,
+    businessTagline: null,
+    businessAddress: null,
+    businessPhone: null,
+    businessEmail: null,
+    businessGstin: null,
   };
 
   const products = INITIAL_PRODUCTS.slice(0, 2).map((p) => ({
     id: p.id,
     name: p.name,
+    unit: p.unit,
     price: { toString: () => String(p.price) },
     stock: { toString: () => String(p.stock) },
     isActive: true,
@@ -68,6 +75,7 @@ async function main() {
         {
           id: "p3",
           name: "Tomato",
+          unit: "1 kg",
           price: { toString: () => "45" },
           stock: { toString: () => "10" },
           isActive: true,

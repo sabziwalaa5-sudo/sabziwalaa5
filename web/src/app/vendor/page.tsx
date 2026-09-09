@@ -492,6 +492,11 @@ export default function VendorPortal() {
                           <p style={{ margin: 0 }}>📍 Client: <strong>{selectedOrderDetails.customerName}</strong> ({selectedOrderDetails.customerEmail})</p>
                           <p style={{ margin: "0.25rem 0 0" }}>📍 Address: {selectedOrderDetails.deliveryAddress}</p>
                         </div>
+                        <div style={{ marginTop: "1rem" }}>
+                          <a href={`/orders/${selectedOrderDetails.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ fontSize: "0.8rem", padding: "0.4rem 0.75rem", textDecoration: "none" }}>
+                            View Receipt
+                          </a>
+                        </div>
                       </div>
                     ) : (
                       <div className="card" style={{ textAlign: "center", color: "var(--text-secondary)", padding: "3rem 1.5rem", borderRadius: "16px" }}>

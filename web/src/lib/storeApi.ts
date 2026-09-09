@@ -4,6 +4,9 @@ import { supabase } from "./supabase";
 import { getApiBaseUrl } from "./config";
 import type { PlatformSettings } from "./platformSettings";
 import type { ClientOrder, ClientProduct, ClientVendor, ClientCoupon, ClientWallet } from "./server/repository";
+import type { ReceiptPayload } from "./server/receipt";
+
+export type { ReceiptPayload };
 
 async function authHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -158,6 +161,16 @@ export async function createOrderOnServer(input: {
   });
   const data = await parseJson<{ order: ClientOrder }>(res);
   return data.order;
+}
+
+export async function fetchOrderReceipt(orderId: string): Promise<ReceiptPayload> {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/orders/${orderId}/receipt`, {
+    headers,
+    credentials: "include",
+  });
+  const data = await parseJson<{ receipt: ReceiptPayload }>(res);
+  return data.receipt;
 }
 
 export async function updateOrderStatusOnServer(orderId: string, orderStatus: string) {

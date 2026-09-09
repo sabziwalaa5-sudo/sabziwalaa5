@@ -8,6 +8,7 @@ export type CalculatedOrder = {
   items: Array<{
     productId: string;
     productName: string;
+    unit: string;
     quantity: number;
     unitPrice: number;
     subtotal: number;
@@ -31,6 +32,12 @@ export function settingsToClient(settings: PlatformSettings) {
       earningRate: decimalToNumber(settings.rewardEarningRate),
       pointValue: decimalToNumber(settings.rewardPointValue),
     },
+    businessName: settings.businessName,
+    businessTagline: settings.businessTagline,
+    businessAddress: settings.businessAddress,
+    businessPhone: settings.businessPhone,
+    businessEmail: settings.businessEmail,
+    businessGstin: settings.businessGstin,
   };
 }
 
@@ -39,6 +46,7 @@ export function calculateOrderTotals(input: {
   products: Array<{
     id: string;
     name: string;
+    unit: string;
     price: { toString(): string };
     stock: { toString(): string };
     isActive: boolean;
@@ -75,6 +83,7 @@ export function calculateOrderTotals(input: {
     items.push({
       productId: product.id,
       productName: product.name,
+      unit: product.unit,
       quantity: line.quantity,
       unitPrice,
       subtotal: unitPrice * line.quantity,

@@ -165,6 +165,8 @@ model Order {
   razorpayPaymentId String?     @unique
   checkoutToken     String?
   idempotencyKey    String?     @unique
+  invoiceNumber     String?     @unique
+  invoiceGeneratedAt DateTime?
   vendor            Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   items             OrderItem[]
   createdAt         DateTime    @default(now())
@@ -175,6 +177,12 @@ model Order {
   @@index([vendorId])
   @@index([createdAt])
   @@index([paymentStatus])
+  @@index([invoiceNumber])
+}
+
+model ReceiptCounter {
+  year      Int @id
+  lastValue Int @default(0)
 }
 
 model OrderItem {
@@ -182,6 +190,7 @@ model OrderItem {
   orderId     String
   productId   String?
   productName String
+  unit        String?
   quantity    Int
   unitPrice   Decimal  @db.Decimal(10, 2)
   subtotal    Decimal  @db.Decimal(10, 2)
@@ -200,6 +209,12 @@ model PlatformSettings {
   rewardEnabled         Boolean @default(true)
   rewardEarningRate     Decimal @default(5) @db.Decimal(10, 2)
   rewardPointValue      Decimal @default(1) @db.Decimal(10, 2)
+  businessName          String?
+  businessTagline       String?
+  businessAddress       String?
+  businessPhone         String?
+  businessEmail         String?
+  businessGstin         String?
 }
 
 model Coupon {

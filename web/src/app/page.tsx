@@ -108,7 +108,6 @@ export default function Home() {
   const [newAddressText, setNewAddressText] = useState("");
 
   // Cart & Orders
-  const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [paymentMode, setPaymentMode] = useState<"cod" | "upi" | "card">("cod");
 
@@ -1237,9 +1236,9 @@ export default function Home() {
                           <span className={`status-pill ${order.orderStatus === "Delivered" ? "status-delivered" : order.orderStatus === "Cancelled" ? "status-cancelled" : "status-pending"}`}>
                             {order.orderStatus}
                           </span>
-                          <button onClick={() => setSelectedOrderDetails(order)} className="btn btn-secondary" style={{ fontSize: "12px", padding: "6px 12px" }}>
+                          <a href={`/orders/${order.id}/receipt`} className="btn btn-secondary" style={{ fontSize: "12px", padding: "6px 12px", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                             <Eye size={14} /> Receipt
-                          </button>
+                          </a>
                         </div>
                       </div>
                     ))

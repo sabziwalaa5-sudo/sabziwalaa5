@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import { supabase, startGoogleOAuth } from "../../lib/supabase";
-import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Settings, Gift, FileText, ShoppingBag, Store, Users, Tag, AlertTriangle, Truck } from "lucide-react";
+import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Settings, Gift, FileText, ShoppingBag, Store, Users, Tag, AlertTriangle, Truck, Printer, Download } from "lucide-react";
 import { INITIAL_CAMPAIGNS } from "../../lib/catalogSeed";
 import { useSabjiwalaStore } from "../../hooks/useSabjiwalaStore";
 import {
@@ -111,6 +111,12 @@ export default function AdminPortal() {
   const [minOrderThreshold, setMinOrderThreshold] = useState(INITIAL_SETTINGS.minOrderThreshold);
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(INITIAL_SETTINGS.freeDeliveryThreshold);
   const [settingsSavedAt, setSettingsSavedAt] = useState<string | null>(null);
+  const [businessName, setBusinessName] = useState("Sabjiwala");
+  const [businessTagline, setBusinessTagline] = useState("Fresh Groceries Delivered");
+  const [businessAddress, setBusinessAddress] = useState("");
+  const [businessPhone, setBusinessPhone] = useState("");
+  const [businessEmail, setBusinessEmail] = useState("");
+  const [businessGstin, setBusinessGstin] = useState("");
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
 
@@ -120,6 +126,13 @@ export default function AdminPortal() {
     setMaintenanceMode(platformSettings.maintenanceMode);
     setMinOrderThreshold(platformSettings.minOrderThreshold);
     setFreeDeliveryThreshold(platformSettings.freeDeliveryThreshold);
+    const ps = platformSettings as Record<string, unknown>;
+    if (ps.businessName != null) setBusinessName(String(ps.businessName || ""));
+    if (ps.businessTagline != null) setBusinessTagline(String(ps.businessTagline || ""));
+    if (ps.businessAddress != null) setBusinessAddress(String(ps.businessAddress || ""));
+    if (ps.businessPhone != null) setBusinessPhone(String(ps.businessPhone || ""));
+    if (ps.businessEmail != null) setBusinessEmail(String(ps.businessEmail || ""));
+    if (ps.businessGstin != null) setBusinessGstin(String(ps.businessGstin || ""));
 
     fetchStaffSession().then((session) => {
       if (session && canAccessPortal(session.role, "admin")) {
@@ -155,12 +168,24 @@ export default function AdminPortal() {
     minOrderThreshold: number;
     freeDeliveryThreshold: number;
     rewardSettings: typeof rewardSettings;
+    businessName: string;
+    businessTagline: string;
+    businessAddress: string;
+    businessPhone: string;
+    businessEmail: string;
+    businessGstin: string;
   }>) => {
     const merged = {
       maintenanceMode: next.maintenanceMode ?? maintenanceMode,
       minOrderThreshold: next.minOrderThreshold ?? minOrderThreshold,
       freeDeliveryThreshold: next.freeDeliveryThreshold ?? freeDeliveryThreshold,
       rewardSettings: next.rewardSettings ?? rewardSettings,
+      businessName: next.businessName ?? businessName,
+      businessTagline: next.businessTagline ?? businessTagline,
+      businessAddress: next.businessAddress ?? businessAddress,
+      businessPhone: next.businessPhone ?? businessPhone,
+      businessEmail: next.businessEmail ?? businessEmail,
+      businessGstin: next.businessGstin ?? businessGstin,
     };
     await saveSettings({
       maintenanceMode: merged.maintenanceMode,
@@ -169,6 +194,12 @@ export default function AdminPortal() {
       rewardEnabled: merged.rewardSettings.enabled,
       rewardEarningRate: merged.rewardSettings.earningRate,
       rewardPointValue: merged.rewardSettings.pointValue,
+      businessName: merged.businessName || null,
+      businessTagline: merged.businessTagline || null,
+      businessAddress: merged.businessAddress || null,
+      businessPhone: merged.businessPhone || null,
+      businessEmail: merged.businessEmail || null,
+      businessGstin: merged.businessGstin || null,
     });
     setSettingsSavedAt(new Date().toLocaleTimeString("en-IN"));
     await reload();
@@ -679,8 +710,9 @@ export default function AdminPortal() {
                             <td style={{ padding: "0.75rem 1rem", fontWeight: "700" }}>₹{o.totalAmount}</td>
                             <td style={{ padding: "0.75rem 1rem" }}><span className="badge badge-success">{o.orderStatus}</span></td>
                             <td style={{ padding: "0.75rem 1rem" }}>
-                              <div style={{ display: "flex", gap: "0.35rem" }}>
-                                <button onClick={() => setSelectedOrderDetails(o)} className="btn btn-secondary" style={{ padding: "0.2rem 0.4rem", fontSize: "0.7rem" }}><Eye size={12} /></button>
+                              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
+                                <button onClick={() => setSelectedOrderDetails(o)} className="btn btn-secondary" style={{ padding: "0.2rem 0.4rem", fontSize: "0.7rem" }} title="Quick view"><Eye size={12} /></button>
+                                <a href={`/orders/${o.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ padding: "0.2rem 0.4rem", fontSize: "0.7rem", textDecoration: "none" }} title="View receipt"><FileText size={12} /></a>
                                 <select
                                   value={o.orderStatus}
                                   onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
@@ -704,7 +736,10 @@ export default function AdminPortal() {
                   <div>
                     {selectedOrderDetails ? (
                       <div className="card" style={{ borderRadius: "16px" }}>
-                        <h4 style={{ fontWeight: "800", borderBottom: "1px solid var(--border)", paddingBlockEnd: "0.5rem" }}>Bill Detail: {selectedOrderDetails.id}</h4>
+                        <h4 style={{ fontWeight: "800", borderBottom: "1px solid var(--border)", paddingBlockEnd: "0.5rem" }}>Order: {selectedOrderDetails.id}</h4>
+                        {selectedOrderDetails.invoiceNumber ? (
+                          <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "0.5rem" }}>Invoice: {selectedOrderDetails.invoiceNumber}</p>
+                        ) : null}
                         <div style={{ marginBlock: "1rem", display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "0.85rem" }}>
                           {selectedOrderDetails.items.map((it: any, idx: number) => (
                             <div key={idx} style={{ display: "flex", justifyContent: "space-between" }}>
@@ -717,6 +752,17 @@ export default function AdminPortal() {
                           <div style={{ display: "flex", justifyContent: "space-between" }}><span>Subtotal</span><span>₹{selectedOrderDetails.subtotal}</span></div>
                           <div style={{ display: "flex", justifyContent: "space-between" }}><span>Delivery charge</span><span>₹{selectedOrderDetails.deliveryCharges}</span></div>
                           <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "700", color: "var(--accent)" }}><span>Total Amount</span><span>₹{selectedOrderDetails.totalAmount}</span></div>
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border)" }}>
+                          <a href={`/orders/${selectedOrderDetails.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }}>
+                            <FileText size={12} /> View Receipt
+                          </a>
+                          <a href={`/orders/${selectedOrderDetails.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }} onClick={(e) => { e.preventDefault(); const w = window.open(`/orders/${selectedOrderDetails.id}/receipt`, "_blank"); w?.addEventListener("load", () => w.print()); }}>
+                            <Printer size={12} /> Print
+                          </a>
+                          <a href={`/orders/${selectedOrderDetails.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }} onClick={(e) => { e.preventDefault(); const w = window.open(`/orders/${selectedOrderDetails.id}/receipt`, "_blank"); w?.addEventListener("load", () => w.print()); }}>
+                            <Download size={12} /> Download PDF
+                          </a>
                         </div>
                       </div>
                     ) : (
@@ -1010,6 +1056,41 @@ export default function AdminPortal() {
                   <p className="t-caption" style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
                     These settings apply immediately to the customer storefront and native apps at the same origin.
                     {settingsSavedAt ? ` Last synced ${settingsSavedAt}.` : ""}
+                  </p>
+                </div>
+
+                <div className="card" style={{ borderRadius: "16px", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                  <h4 style={{ fontWeight: "800", fontSize: "1rem" }}>Business Details (Receipts & Invoices)</h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Business Name</label>
+                      <input type="text" value={businessName} onChange={(e) => { setBusinessName(e.target.value); persistPlatformSettings({ businessName: e.target.value }); }} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Tagline</label>
+                      <input type="text" value={businessTagline} onChange={(e) => { setBusinessTagline(e.target.value); persistPlatformSettings({ businessTagline: e.target.value }); }} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }} />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                    <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Business Address</label>
+                    <textarea value={businessAddress} onChange={(e) => { setBusinessAddress(e.target.value); persistPlatformSettings({ businessAddress: e.target.value }); }} rows={2} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem", resize: "vertical" }} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Phone</label>
+                      <input type="text" value={businessPhone} onChange={(e) => { setBusinessPhone(e.target.value); persistPlatformSettings({ businessPhone: e.target.value }); }} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Email</label>
+                      <input type="email" value={businessEmail} onChange={(e) => { setBusinessEmail(e.target.value); persistPlatformSettings({ businessEmail: e.target.value }); }} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>GSTIN (optional)</label>
+                      <input type="text" value={businessGstin} onChange={(e) => { setBusinessGstin(e.target.value); persistPlatformSettings({ businessGstin: e.target.value }); }} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }} />
+                    </div>
+                  </div>
+                  <p className="t-caption" style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                    These details appear on customer receipts and invoices. Logo uses the default Sabjiwala brand asset.
                   </p>
                 </div>
               </div>

@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { calculateOrderTotals, generateOrderId, settingsToClient } from "./orderMath";
+import { allocateInvoiceNumber } from "./invoiceNumber";
 import { decimalToNumber, toJson } from "./serialize";
 import { ensureDatabaseReady } from "./bootstrap";
 import { resolveCategoryId, setProductManualSections } from "./catalog";
@@ -54,6 +55,7 @@ export type ClientVendor = {
 export type ClientOrderItem = {
   productId: string | null;
   name: string;
+  unit?: string | null;
   qty: number;
   price: number;
   subtotal: number;
@@ -62,6 +64,7 @@ export type ClientOrderItem = {
 export type ClientOrder = {
   id: string;
   date: string;
+  invoiceNumber?: string | null;
   customerName?: string | null;
   customerEmail?: string | null;
   customerMobile?: string | null;
@@ -163,6 +166,7 @@ function serializeVendor(vendor: {
 function serializeOrder(order: {
   id: string;
   createdAt: Date;
+  invoiceNumber?: string | null;
   customerName: string | null;
   customerEmail: string | null;
   customerMobile: string | null;
@@ -179,6 +183,7 @@ function serializeOrder(order: {
   items: Array<{
     productId: string | null;
     productName: string;
+    unit?: string | null;
     quantity: number;
     unitPrice: Prisma.Decimal;
     subtotal: Prisma.Decimal;
@@ -187,6 +192,7 @@ function serializeOrder(order: {
   return {
     id: order.id,
     date: order.createdAt.toLocaleString("en-IN"),
+    invoiceNumber: order.invoiceNumber,
     customerName: order.customerName,
     customerEmail: order.customerEmail,
     customerMobile: order.customerMobile,
@@ -197,6 +203,7 @@ function serializeOrder(order: {
     items: order.items.map((item) => ({
       productId: item.productId,
       name: item.productName,
+      unit: item.unit,
       qty: item.quantity,
       price: decimalToNumber(item.unitPrice),
       subtotal: decimalToNumber(item.subtotal),
@@ -425,6 +432,12 @@ export async function updatePlatformSettings(input: {
   rewardEnabled?: boolean;
   rewardEarningRate?: number;
   rewardPointValue?: number;
+  businessName?: string | null;
+  businessTagline?: string | null;
+  businessAddress?: string | null;
+  businessPhone?: string | null;
+  businessEmail?: string | null;
+  businessGstin?: string | null;
 }) {
   await ready();
   const settings = await prisma.platformSettings.update({
@@ -437,6 +450,12 @@ export async function updatePlatformSettings(input: {
       ...(input.rewardEnabled != null ? { rewardEnabled: input.rewardEnabled } : {}),
       ...(input.rewardEarningRate != null ? { rewardEarningRate: input.rewardEarningRate } : {}),
       ...(input.rewardPointValue != null ? { rewardPointValue: input.rewardPointValue } : {}),
+      ...(input.businessName !== undefined ? { businessName: input.businessName } : {}),
+      ...(input.businessTagline !== undefined ? { businessTagline: input.businessTagline } : {}),
+      ...(input.businessAddress !== undefined ? { businessAddress: input.businessAddress } : {}),
+      ...(input.businessPhone !== undefined ? { businessPhone: input.businessPhone } : {}),
+      ...(input.businessEmail !== undefined ? { businessEmail: input.businessEmail } : {}),
+      ...(input.businessGstin !== undefined ? { businessGstin: input.businessGstin } : {}),
     },
   });
   return settingsToClient(settings);
@@ -739,6 +758,7 @@ export async function createOrder(input: {
   const orderId = generateOrderId();
 
   const order = await prisma.$transaction(async (tx) => {
+    const invoiceNumber = await allocateInvoiceNumber(tx);
     const created = await tx.order.create({
       data: {
         id: orderId,
@@ -759,10 +779,13 @@ export async function createOrder(input: {
         longitude,
         addressId,
         idempotencyKey: input.idempotencyKey,
+        invoiceNumber,
+        invoiceGeneratedAt: new Date(),
         items: {
           create: calculated.items.map((item) => ({
             productId: item.productId,
             productName: item.productName,
+            unit: item.unit,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,

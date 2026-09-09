@@ -19,6 +19,12 @@ export const PATCH = withApiHandler(async (request: NextRequest) => {
     ...(body.rewardEnabled != null ? { rewardEnabled: Boolean(body.rewardEnabled) } : {}),
     ...(body.rewardEarningRate != null ? { rewardEarningRate: Number(body.rewardEarningRate) } : {}),
     ...(body.rewardPointValue != null ? { rewardPointValue: Number(body.rewardPointValue) } : {}),
+    ...(body.businessName !== undefined ? { businessName: body.businessName ? String(body.businessName) : null } : {}),
+    ...(body.businessTagline !== undefined ? { businessTagline: body.businessTagline ? String(body.businessTagline) : null } : {}),
+    ...(body.businessAddress !== undefined ? { businessAddress: body.businessAddress ? String(body.businessAddress) : null } : {}),
+    ...(body.businessPhone !== undefined ? { businessPhone: body.businessPhone ? String(body.businessPhone) : null } : {}),
+    ...(body.businessEmail !== undefined ? { businessEmail: body.businessEmail ? String(body.businessEmail) : null } : {}),
+    ...(body.businessGstin !== undefined ? { businessGstin: body.businessGstin ? String(body.businessGstin) : null } : {}),
   });
   return jsonOk({ settings });
 });

@@ -26,9 +26,7 @@ import {
   Sparkles,
   X,
   Gift,
-  Search,
   Home as HomeIcon,
-  Mic,
   Bell,
   ChevronRight,
   Star,
@@ -49,6 +47,7 @@ import { getPlatformSettings, pointsEarnedForOrder, rupeesFromPoints, type Platf
 import { INITIAL_REVIEWS } from "../lib/sharedState";
 import { useSabjiwalaStore } from "../hooks/useSabjiwalaStore";
 import { createOrderOnServer, setCartItemOnServer, clearCartOnServer, fetchAddresses, saveAddress, updateAddressOnServer, deleteAddressOnServer, fetchStorefront, fetchCategories, type ClientCategory, type StorefrontSectionPayload } from "../lib/storeApi";
+import SearchBarWithRecommendations from "../components/SearchBarWithRecommendations";
 
 export default function Home() {
   // Navigation & View Subtab
@@ -713,17 +712,17 @@ export default function Home() {
           </div>
 
           {/* Apple-Style Search Bar */}
-          <div style={{ flex: 1, maxWidth: "460px", marginInline: "16px", position: "relative" }}>
-            <Search size={18} style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "var(--text-4)" }} />
-            <input
-              type="text"
-              placeholder="Search fresh spinach, mangoes, milk..."
+          <div style={{ flex: 1, maxWidth: "460px", marginInline: "16px" }}>
+            <SearchBarWithRecommendations
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); if (customerSubTab !== "catalog") setCustomerSubTab("catalog"); }}
-              className="search-bar-premium"
-              style={{ paddingRight: "40px" }}
+              onChange={setSearchQuery}
+              onFocusCatalog={() => { if (customerSubTab !== "catalog") setCustomerSubTab("catalog"); }}
+              onSelectProduct={(productId) => {
+                const product = liveCatalog.find((p) => p.id === productId);
+                if (product) setSelectedProduct(product);
+              }}
+              onSelectCategory={(categoryName) => setSelectedCategory(categoryName)}
             />
-            <Mic size={16} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-4)", cursor: "pointer" }} onClick={() => alert("Voice search listening...")} />
           </div>
 
           {/* Nav Actions */}
@@ -785,18 +784,18 @@ export default function Home() {
 
       {/* ═══════ 3. MOBILE STICKY APPLE SEARCH ═══════ */}
       <div className="mobile-search-sticky">
-        <div style={{ position: "relative", width: "100%" }}>
-          <Search size={17} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-4)" }} />
-          <input
-            type="text"
-            placeholder="Search organic fruits, vegetables..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); if (customerSubTab !== "catalog") setCustomerSubTab("catalog"); }}
-            className="search-bar-premium"
-            style={{ height: "44px", fontSize: "14px" }}
-          />
-          <Mic size={17} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-4)", cursor: "pointer" }} onClick={() => alert("Voice search activated")} />
-        </div>
+        <SearchBarWithRecommendations
+          compact
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search organic fruits, vegetables..."
+          onFocusCatalog={() => { if (customerSubTab !== "catalog") setCustomerSubTab("catalog"); }}
+          onSelectProduct={(productId) => {
+            const product = liveCatalog.find((p) => p.id === productId);
+            if (product) setSelectedProduct(product);
+          }}
+          onSelectCategory={(categoryName) => setSelectedCategory(categoryName)}
+        />
       </div>
 
       {/* ═══════ NOTIFICATION DROPDOWN ═══════ */}

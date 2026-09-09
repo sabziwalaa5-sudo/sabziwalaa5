@@ -444,6 +444,29 @@ export async function fetchStorefront(): Promise<{ categories: ClientCategory[];
   return parseJson(res);
 }
 
+export type SearchRecommendation = {
+  type: "product" | "category" | "query";
+  id?: string;
+  label: string;
+  subtitle?: string | null;
+  imageUrl?: string | null;
+  category?: string | null;
+  query: string;
+};
+
+export async function fetchSearchRecommendations(query = "", limit = 8): Promise<{
+  query: string;
+  suggestions: SearchRecommendation[];
+  popular: SearchRecommendation[];
+}> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (query.trim()) params.set("q", query.trim());
+  const res = await fetch(`${base()}/api/search/recommendations?${params.toString()}`, {
+    credentials: "include",
+  });
+  return parseJson(res);
+}
+
 export async function uploadProductImage(productId: string, file: File) {
   const headers = await authHeaders();
   const form = new FormData();

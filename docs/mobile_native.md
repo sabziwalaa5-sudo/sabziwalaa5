@@ -1,76 +1,70 @@
-# Native Android + iOS (Capacitor)
+# Sabjiwala mobile apps
 
-The production website stays on Vercel. Native apps wrap that site in Capacitor (`com.sabjiwala.app`) and load `https://web-sabziwalaa5.vercel.app` by default.
+The **shippable Android / iOS app** is Capacitor in `web/` (`com.sabjiwala.app`). It opens the live linked site:
+
+- Storefront (APK start URL): https://web-sabziwalaa5.vercel.app/
+- Apps launcher: https://web-sabziwalaa5.vercel.app/apps
+- Admin: https://web-sabziwalaa5.vercel.app/admin
+- Vendor: https://web-sabziwalaa5.vercel.app/vendor
+- Rider: https://web-sabziwalaa5.vercel.app/rider
+
+`/app` redirects to `/` so older APKs that opened `/app` do not land on a 404.
+
+`mobile/` is an optional Flutter wrapper of the same URLs. Capacitor is the app to ship.
 
 ## Prerequisites
 
 - Node.js 20+
-- Android Studio + JDK 17 for Android builds
-- Xcode 16+ on macOS for iOS builds
-- Apple Developer and Google Play accounts for store release
+- Android Studio + JDK 17 for Android
+- Xcode 16+ on macOS for iOS
 
-## Web (Vercel remains unchanged)
+## Run the mobile home in a browser
 
-```bash
-cd web
-npm ci
-npm run type-check
-npm test
-npm run build
-npm run start
-```
+https://web-sabziwalaa5.vercel.app/apps
 
-## Native sync
+## Android (Capacitor)
 
 ```bash
 cd web
 npm ci
-npx cap sync
-```
-
-Point the WebView at a local Next server (LAN IP, not localhost, for physical devices):
-
-```bash
-CAPACITOR_SERVER_URL=http://192.168.1.10:3000 npx cap sync
-```
-
-## Android
-
-```bash
-cd web
+npx cap sync android
 npx cap open android
-# Android Studio: Build > Build Bundle(s) / APK(s)
 ```
 
-CLI APK/AAB (requires Android SDK):
+CLI debug APK (needs Android SDK):
 
 ```bash
 cd web/android
 ./gradlew assembleDebug
-./gradlew assembleRelease
-./gradlew bundleRelease
 ```
 
-Outputs:
+APK: `web/android/app/build/outputs/apk/debug/app-debug.apk`
 
-- APK: `web/android/app/build/outputs/apk/`
-- AAB: `web/android/app/build/outputs/bundle/release/app-release.aab`
+Direct install page: https://web-sabziwalaa5.vercel.app/download
+Hosted APK: https://web-sabziwalaa5.vercel.app/downloads/sabjiwala.apk
 
-Create `web/android/key.properties` locally (do not commit) for release signing.
-
-## iOS
+## iOS (Capacitor)
 
 ```bash
 cd web
+npm ci
+npx cap sync ios
 npx cap open ios
 ```
 
-In Xcode: select a development team, then Product > Archive. Export IPA from Organizer.
-
 Bundle ID: `com.sabjiwala.app`
 
-## Store checklist
+Point a device at a local Next server:
 
-Play: application ID `com.sabjiwala.app`, privacy policy URL, target API 34+, 512px icon, feature graphic, Data safety form (location, payments).
+```bash
+CAPACITOR_SERVER_URL=http://192.168.1.10:3000/ npx cap sync
+```
 
-App Store: bundle ID `com.sabjiwala.app`, privacy nutrition labels, NSLocationWhenInUseUsageDescription, payment disclosure, 1024px icon.
+## Flutter (optional)
+
+```bash
+cd mobile
+flutter create . --project-name sabjiwala5_mobile
+flutter pub get
+flutter run
+```

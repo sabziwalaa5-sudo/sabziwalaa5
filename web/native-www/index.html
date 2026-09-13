@@ -6,32 +6,34 @@
     <meta name="theme-color" content="#15803d" />
     <title>Sabjiwala</title>
     <style>
-      html, body { margin: 0; height: 100%; background: #15803d; color: #fff; font-family: -apple-system, BlinkMacSystemFont, Inter, sans-serif; }
-      .wrap { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+      html, body { margin: 0; min-height: 100%; background: #14532d; color: #fff; font-family: -apple-system, BlinkMacSystemFont, Inter, sans-serif; }
+      .wrap { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
       h1 { margin: 12px 0 8px; font-size: 28px; }
       p { max-width: 320px; line-height: 1.5; opacity: 0.92; }
-      button { margin-top: 20px; background: #fff; color: #15803d; border: 0; border-radius: 999px; padding: 12px 22px; font-weight: 700; }
+      .roles { display: grid; gap: 10px; width: min(360px, 100%); margin-top: 20px; }
+      button { background: #fff; color: #15803d; border: 0; border-radius: 16px; padding: 14px 16px; font-weight: 700; font-size: 15px; text-align: left; }
     </style>
   </head>
   <body>
     <div class="wrap">
       <div style="font-size: 56px">🥬</div>
       <h1>SABJIWALAA ५</h1>
-      <p id="msg">Connecting to Sabjiwala… If this screen stays, your device is offline.</p>
-      <button id="retry" type="button">Retry</button>
+      <p id="msg">Choose an app. If you stay here, the device is offline.</p>
+      <div class="roles">
+        <button type="button" data-path="/">🥬 Customer</button>
+        <button type="button" data-path="/admin">🛡️ Admin</button>
+        <button type="button" data-path="/vendor">🏪 Vendor</button>
+        <button type="button" data-path="/rider">🛵 Rider</button>
+      </div>
     </div>
     <script>
-      const LIVE = "https://web-sabziwalaa5.vercel.app/";
-      async function ping() {
-        try {
-          const res = await fetch(LIVE, { method: "HEAD", mode: "no-cors" });
-          document.getElementById("msg").textContent = "Opening marketplace…";
-        } catch (e) {
-          document.getElementById("msg").textContent = "Unable to reach Sabjiwala. Check your internet connection and retry.";
-        }
+      const LIVE = "https://web-sabziwalaa5.vercel.app";
+      function openPath(path) {
+        window.location.href = LIVE + (path || "/");
       }
-      document.getElementById("retry").onclick = ping;
-      ping();
+      document.querySelectorAll("button[data-path]").forEach((btn) => {
+        btn.onclick = () => openPath(btn.getAttribute("data-path"));
+      });
     </script>
   </body>
 </html>

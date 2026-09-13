@@ -1,15 +1,10 @@
-import 'package:flutter/material';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
-void main() async {
+const liveOrigin = 'https://web-sabziwalaa5.vercel.app';
+
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Supabase SDK client (uses free-tier hosted instance credentials)
-  await Supabase.initialize(
-    url: 'https://placeholder-project.supabase.co',
-    anonKey: 'placeholder-anon-key',
-  );
-
   runApp(const SabjiwalaApp());
 }
 
@@ -19,11 +14,9 @@ class SabjiwalaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SABJIWALAA ५ - Mobile',
+      title: 'SABJIWALAA ५',
       theme: ThemeData(
-        brightness: Brightness.dark,
-        primaryColor: const Color(0xFF22C55E),
-        scaffoldBackgroundColor: const Color(0xFF0F1711),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF15803D)),
         useMaterial3: true,
       ),
       home: const RoleSelectorScreen(),
@@ -34,138 +27,96 @@ class SabjiwalaApp extends StatelessWidget {
 class RoleSelectorScreen extends StatelessWidget {
   const RoleSelectorScreen({super.key});
 
+  void open(BuildContext context, String title, String path) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => PortalWebView(title: title, path: path)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('SABJIWALAA ५ (Free MVP)'),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Select Dashboard Role',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.shopping_cart),
-              label: const Text('Customer Portal'),
-              onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerDashboard()));
-              },
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.storefront),
-              label: const Text('Vendor Dashboard'),
-              onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const VendorDashboard()));
-              },
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.delivery_dining),
-              label: const Text('Rider Delivery Board'),
-              onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const DeliveryDashboard()));
-              },
-            ),
-          ],
+      backgroundColor: const Color(0xFF14532D),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 24),
+              const Text(
+                '🥬\nSABJIWALAA ५',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Mobile app for the live storefront, admin, vendor, and rider portals.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70),
+              ),
+              const Spacer(),
+              _RoleButton(label: 'Customer', onTap: () => open(context, 'Customer', '/')),
+              _RoleButton(label: 'Admin', onTap: () => open(context, 'Admin', '/admin')),
+              _RoleButton(label: 'Vendor', onTap: () => open(context, 'Vendor', '/vendor')),
+              _RoleButton(label: 'Rider', onTap: () => open(context, 'Rider', '/rider')),
+              const Spacer(),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class CustomerDashboard extends StatefulWidget {
-  const CustomerDashboard({super.key});
+class _RoleButton extends StatelessWidget {
+  const _RoleButton({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
 
   @override
-  State<CustomerDashboard> createState() => _CustomerDashboardState();
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: FilledButton(
+        onPressed: onTap,
+        style: FilledButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF15803D),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+        ),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+      ),
+    );
+  }
 }
 
-class _CustomerDashboardState extends State<CustomerDashboard> {
-  String orderStatus = "PLACED";
-  final supabase = Supabase.instance.client;
+class PortalWebView extends StatefulWidget {
+  const PortalWebView({super.key, required this.title, required this.path});
+  final String title;
+  final String path;
+
+  @override
+  State<PortalWebView> createState() => _PortalWebViewState();
+}
+
+class _PortalWebViewState extends State<PortalWebView> {
+  late final WebViewController controller;
 
   @override
   void initState() {
     super.initState();
-    subscribeToOrderStatus();
-  }
-
-  void subscribeToOrderStatus() {
-    // Realtime Database replication hook
-    supabase
-        .channel('public:orders')
-        .onPostgresChanges(
-            event: PostgresChangeEvent.update,
-            schema: 'public',
-            table: 'orders',
-            callback: (payload) {
-              setState(() {
-                orderStatus = payload.newRecord['order_status'] ?? 'Pending';
-              });
-            })
-        .subscribe();
+    controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..loadRequest(Uri.parse('$liveOrigin${widget.path}'));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Customer Storefront')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.location_on, size: 82, color: Colors.greenAccent),
-            const SizedBox(height: 16),
-            const Text(
-              'Leaflet OpenStreetMap equivalent for Flutter maps loaded',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Order Status: $orderStatus',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.greenAccent),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class VendorDashboard extends StatelessWidget {
-  const VendorDashboard({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Akshay Organic Farm')),
-      body: const Center(
-        child: Text('Vendor incoming queues & products catalog listings'),
-      ),
-    );
-  }
-}
-
-class DeliveryDashboard extends StatelessWidget {
-  const DeliveryDashboard({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Rider Tracking Portal')),
-      body: const Center(
-        child: Text('Pushing location coordinates to public.driver_positions table'),
-      ),
+      appBar: AppBar(title: Text(widget.title)),
+      body: WebViewWidget(controller: controller),
     );
   }
 }

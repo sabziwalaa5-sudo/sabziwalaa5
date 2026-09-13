@@ -90,6 +90,8 @@ Customers browse `/`, authenticate via Supabase, and all cart/order/address data
 | `STAFF_VENDOR_EMAILS` | Comma-separated vendor emails |
 | `STAFF_RIDER_EMAILS` | Comma-separated rider emails |
 | `SEED_DEMO_DATA` | Set to `1` to load demo catalog via seed |
+| `SMTP_*` | Email receipt delivery (see `web/.env.example`) |
+| `TWILIO_*` | WhatsApp API send (share links work without Twilio) |
 
 ## Validation commands
 

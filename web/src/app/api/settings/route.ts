@@ -25,6 +25,7 @@ export const PATCH = withApiHandler(async (request: NextRequest) => {
     ...(body.businessPhone !== undefined ? { businessPhone: body.businessPhone ? String(body.businessPhone) : null } : {}),
     ...(body.businessEmail !== undefined ? { businessEmail: body.businessEmail ? String(body.businessEmail) : null } : {}),
     ...(body.businessGstin !== undefined ? { businessGstin: body.businessGstin ? String(body.businessGstin) : null } : {}),
+    ...(body.businessLogoUrl !== undefined ? { businessLogoUrl: body.businessLogoUrl ? String(body.businessLogoUrl) : null } : {}),
   });
   return jsonOk({ settings });
 });

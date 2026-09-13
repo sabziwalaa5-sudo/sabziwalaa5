@@ -76,6 +76,8 @@ export type ClientOrder = {
   subtotal: number;
   deliveryCharges: number;
   discount: number;
+  couponCode?: string | null;
+  couponDiscount?: number;
   totalAmount: number;
   vendorId?: string | null;
   paymentId?: string | null;
@@ -177,6 +179,8 @@ function serializeOrder(order: {
   subtotal: Prisma.Decimal;
   deliveryCharge: Prisma.Decimal;
   discount: Prisma.Decimal;
+  couponCode?: string | null;
+  couponDiscount?: Prisma.Decimal;
   totalAmount: Prisma.Decimal;
   vendorId: string | null;
   paymentId: string | null;
@@ -211,6 +215,8 @@ function serializeOrder(order: {
     subtotal: decimalToNumber(order.subtotal),
     deliveryCharges: decimalToNumber(order.deliveryCharge),
     discount: decimalToNumber(order.discount),
+    couponCode: order.couponCode,
+    couponDiscount: decimalToNumber(order.couponDiscount || 0),
     totalAmount: decimalToNumber(order.totalAmount),
     vendorId: order.vendorId,
     paymentId: order.paymentId,
@@ -438,6 +444,7 @@ export async function updatePlatformSettings(input: {
   businessPhone?: string | null;
   businessEmail?: string | null;
   businessGstin?: string | null;
+  businessLogoUrl?: string | null;
 }) {
   await ready();
   const settings = await prisma.platformSettings.update({
@@ -456,6 +463,7 @@ export async function updatePlatformSettings(input: {
       ...(input.businessPhone !== undefined ? { businessPhone: input.businessPhone } : {}),
       ...(input.businessEmail !== undefined ? { businessEmail: input.businessEmail } : {}),
       ...(input.businessGstin !== undefined ? { businessGstin: input.businessGstin } : {}),
+      ...(input.businessLogoUrl !== undefined ? { businessLogoUrl: input.businessLogoUrl } : {}),
     },
   });
   return settingsToClient(settings);
@@ -773,6 +781,8 @@ export async function createOrder(input: {
         subtotal: calculated.subtotal,
         deliveryCharge: calculated.deliveryCharge,
         discount: calculated.discount,
+        couponCode: input.couponCode ? input.couponCode.toUpperCase() : null,
+        couponDiscount,
         totalAmount: calculated.totalAmount,
         deliveryAddress: addressCheck.sanitized,
         latitude,

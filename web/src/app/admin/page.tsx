@@ -117,6 +117,7 @@ export default function AdminPortal() {
   const [businessPhone, setBusinessPhone] = useState("");
   const [businessEmail, setBusinessEmail] = useState("");
   const [businessGstin, setBusinessGstin] = useState("");
+  const [businessLogoUrl, setBusinessLogoUrl] = useState("/images/logo.png");
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
 
@@ -133,6 +134,7 @@ export default function AdminPortal() {
     if (ps.businessPhone != null) setBusinessPhone(String(ps.businessPhone || ""));
     if (ps.businessEmail != null) setBusinessEmail(String(ps.businessEmail || ""));
     if (ps.businessGstin != null) setBusinessGstin(String(ps.businessGstin || ""));
+    if (ps.businessLogoUrl != null) setBusinessLogoUrl(String(ps.businessLogoUrl || "/images/logo.png"));
 
     fetchStaffSession().then((session) => {
       if (session && canAccessPortal(session.role, "admin")) {
@@ -174,6 +176,7 @@ export default function AdminPortal() {
     businessPhone: string;
     businessEmail: string;
     businessGstin: string;
+    businessLogoUrl: string;
   }>) => {
     const merged = {
       maintenanceMode: next.maintenanceMode ?? maintenanceMode,
@@ -186,6 +189,7 @@ export default function AdminPortal() {
       businessPhone: next.businessPhone ?? businessPhone,
       businessEmail: next.businessEmail ?? businessEmail,
       businessGstin: next.businessGstin ?? businessGstin,
+      businessLogoUrl: next.businessLogoUrl ?? businessLogoUrl,
     };
     await saveSettings({
       maintenanceMode: merged.maintenanceMode,
@@ -200,6 +204,7 @@ export default function AdminPortal() {
       businessPhone: merged.businessPhone || null,
       businessEmail: merged.businessEmail || null,
       businessGstin: merged.businessGstin || null,
+      businessLogoUrl: merged.businessLogoUrl || null,
     });
     setSettingsSavedAt(new Date().toLocaleTimeString("en-IN"));
     await reload();
@@ -760,7 +765,7 @@ export default function AdminPortal() {
                           <a href={`/orders/${selectedOrderDetails.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }} onClick={(e) => { e.preventDefault(); const w = window.open(`/orders/${selectedOrderDetails.id}/receipt`, "_blank"); w?.addEventListener("load", () => w.print()); }}>
                             <Printer size={12} /> Print
                           </a>
-                          <a href={`/orders/${selectedOrderDetails.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }} onClick={(e) => { e.preventDefault(); const w = window.open(`/orders/${selectedOrderDetails.id}/receipt`, "_blank"); w?.addEventListener("load", () => w.print()); }}>
+                          <a href={`/api/orders/${selectedOrderDetails.id}/receipt/pdf`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }}>
                             <Download size={12} /> Download PDF
                           </a>
                         </div>
@@ -1089,8 +1094,18 @@ export default function AdminPortal() {
                       <input type="text" value={businessGstin} onChange={(e) => { setBusinessGstin(e.target.value); persistPlatformSettings({ businessGstin: e.target.value }); }} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }} />
                     </div>
                   </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                    <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Logo URL (receipts & branding)</label>
+                    <input
+                      type="text"
+                      value={businessLogoUrl}
+                      onChange={(e) => { setBusinessLogoUrl(e.target.value); persistPlatformSettings({ businessLogoUrl: e.target.value }); }}
+                      placeholder="/images/logo.png"
+                      style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }}
+                    />
+                  </div>
                   <p className="t-caption" style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                    These details appear on customer receipts and invoices. Logo uses the default Sabjiwala brand asset.
+                    These details appear on customer receipts and invoices. Use a site path like /images/logo.png or a full HTTPS image URL.
                   </p>
                 </div>
               </div>

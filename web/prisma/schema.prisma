@@ -156,6 +156,8 @@ model Order {
   subtotal          Decimal     @db.Decimal(10, 2)
   deliveryCharge    Decimal     @db.Decimal(10, 2)
   discount          Decimal     @db.Decimal(10, 2)
+  couponCode        String?
+  couponDiscount    Decimal     @default(0) @db.Decimal(10, 2)
   totalAmount       Decimal     @db.Decimal(10, 2)
   deliveryAddress   String
   latitude          Decimal?    @db.Decimal(9, 6)
@@ -215,6 +217,7 @@ model PlatformSettings {
   businessPhone         String?
   businessEmail         String?
   businessGstin         String?
+  businessLogoUrl       String?
 }
 
 model Coupon {

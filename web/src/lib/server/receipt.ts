@@ -48,6 +48,8 @@ export type ReceiptPayload = {
   totals: {
     subtotal: number;
     discount: number;
+    couponCode?: string | null;
+    couponDiscount: number;
     deliveryCharge: number;
     grandTotal: number;
   };
@@ -127,7 +129,7 @@ async function loadBusinessSettings(): Promise<ReceiptBusiness> {
     phone: settings.businessPhone?.trim() || null,
     email: settings.businessEmail?.trim() || null,
     gstin: settings.businessGstin?.trim() || null,
-    logoUrl: "/images/logo.png",
+    logoUrl: settings.businessLogoUrl?.trim() || "/images/logo.png",
   };
 }
 
@@ -191,6 +193,8 @@ export async function buildReceiptPayload(orderId: string): Promise<ReceiptPaylo
     totals: {
       subtotal: decimalToNumber(order.subtotal),
       discount: decimalToNumber(order.discount),
+      couponCode: order.couponCode,
+      couponDiscount: decimalToNumber(order.couponDiscount),
       deliveryCharge: decimalToNumber(order.deliveryCharge),
       grandTotal: decimalToNumber(order.totalAmount),
     },

@@ -173,6 +173,48 @@ export async function fetchOrderReceipt(orderId: string): Promise<ReceiptPayload
   return data.receipt;
 }
 
+export async function downloadOrderReceiptPdf(orderId: string, filename?: string): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/orders/${orderId}/receipt/pdf`, {
+    headers,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || `PDF download failed (${res.status})`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename || `receipt-${orderId}.pdf`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function sendOrderReceiptEmail(orderId: string, to?: string): Promise<{ sent: boolean; to: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/orders/${orderId}/receipt/email`, {
+    method: "POST",
+    headers,
+    credentials: "include",
+    body: JSON.stringify(to ? { to } : {}),
+  });
+  return parseJson<{ sent: boolean; to: string }>(res);
+}
+
+export async function getReceiptWhatsAppShareUrl(orderId: string, phone?: string): Promise<string> {
+  const headers = await authHeaders();
+  const res = await fetch(`${base()}/api/orders/${orderId}/receipt/whatsapp`, {
+    method: "POST",
+    headers,
+    credentials: "include",
+    body: JSON.stringify({ mode: "share", phone }),
+  });
+  const data = await parseJson<{ shareUrl: string }>(res);
+  return data.shareUrl;
+}
+
 export async function updateOrderStatusOnServer(orderId: string, orderStatus: string) {
   const res = await fetch(`${base()}/api/orders`, {
     method: "PATCH",

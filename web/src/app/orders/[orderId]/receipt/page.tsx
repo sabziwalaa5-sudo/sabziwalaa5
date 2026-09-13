@@ -2,9 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Download, Printer, Share2, ArrowLeft } from "lucide-react";
+import { Download, Printer, Share2, ArrowLeft, Mail, MessageCircle } from "lucide-react";
 import OrderReceipt from "../../../../components/OrderReceipt";
-import { fetchOrderReceipt, type ReceiptPayload } from "../../../../lib/storeApi";
+import {
+  fetchOrderReceipt,
+  downloadOrderReceiptPdf,
+  sendOrderReceiptEmail,
+  getReceiptWhatsAppShareUrl,
+  type ReceiptPayload,
+} from "../../../../lib/storeApi";
 import AppLoadingShell from "../../../../components/AppLoadingShell";
 
 export default function OrderReceiptPage() {
@@ -13,6 +19,8 @@ export default function OrderReceiptPage() {
   const [receipt, setReceipt] = useState<ReceiptPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orderId) return;
@@ -25,12 +33,55 @@ export default function OrderReceiptPage() {
 
   const handlePrint = () => window.print();
 
+  const handleDownloadPdf = async () => {
+    if (!orderId || !receipt) return;
+    setBusyAction("pdf");
+    setActionMessage(null);
+    try {
+      await downloadOrderReceiptPdf(orderId, `${receipt.order.invoiceNumber}.pdf`);
+      setActionMessage("PDF downloaded.");
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : "Unable to download PDF");
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleEmail = async () => {
+    if (!orderId) return;
+    setBusyAction("email");
+    setActionMessage(null);
+    try {
+      const result = await sendOrderReceiptEmail(orderId);
+      setActionMessage(`Receipt emailed to ${result.to}.`);
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : "Unable to email receipt");
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleWhatsApp = async () => {
+    if (!orderId) return;
+    setBusyAction("whatsapp");
+    setActionMessage(null);
+    try {
+      const shareUrl = await getReceiptWhatsAppShareUrl(orderId, receipt?.customer.mobile || undefined);
+      window.open(shareUrl, "_blank", "noopener,noreferrer");
+      setActionMessage("WhatsApp share opened.");
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : "Unable to open WhatsApp share");
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   const handleShare = async () => {
     if (!receipt || !navigator.share) return;
     try {
       await navigator.share({
         title: `Receipt ${receipt.order.invoiceNumber}`,
-        text: `Your Sabjiwala order ${receipt.order.id} — Total ${receipt.totals.grandTotal}`,
+        text: `Your Sabjiwala order ${receipt.order.id} — Total Rs. ${receipt.totals.grandTotal}`,
         url: window.location.href,
       });
     } catch {
@@ -63,8 +114,14 @@ export default function OrderReceiptPage() {
           <button type="button" className="btn btn-secondary" onClick={handlePrint}>
             <Printer size={16} /> Print
           </button>
-          <button type="button" className="btn btn-secondary" onClick={handlePrint}>
-            <Download size={16} /> Download PDF
+          <button type="button" className="btn btn-secondary" onClick={handleDownloadPdf} disabled={busyAction === "pdf"}>
+            <Download size={16} /> {busyAction === "pdf" ? "Downloading…" : "Download PDF"}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={handleEmail} disabled={busyAction === "email"}>
+            <Mail size={16} /> {busyAction === "email" ? "Sending…" : "Email"}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={handleWhatsApp} disabled={busyAction === "whatsapp"}>
+            <MessageCircle size={16} /> WhatsApp
           </button>
           {typeof navigator !== "undefined" && "share" in navigator ? (
             <button type="button" className="btn btn-primary" onClick={handleShare}>
@@ -73,6 +130,7 @@ export default function OrderReceiptPage() {
           ) : null}
         </div>
       </div>
+      {actionMessage ? <p className="receipt-action-message no-print">{actionMessage}</p> : null}
 
       <div className="receipt-page-paper">
         <OrderReceipt receipt={receipt} />

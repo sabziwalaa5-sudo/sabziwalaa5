@@ -34,6 +34,7 @@ async function main() {
     businessPhone: null,
     businessEmail: null,
     businessGstin: null,
+    businessLogoUrl: null,
   };
 
   const products = INITIAL_PRODUCTS.slice(0, 2).map((p) => ({

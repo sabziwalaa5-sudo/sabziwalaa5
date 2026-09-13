@@ -44,9 +44,11 @@ async function main() {
     stock: 10,
   });
 
-  const typed = await getSearchRecommendations("Alphonso");
+  const typed = await getSearchRecommendations(unique);
   assert(typed.suggestions.some((s) => s.type === "product" && s.id === product.id), "typed query returns matching product");
-  assert(typed.suggestions.some((s) => s.label.toLowerCase().includes("alphonso")), "suggestion label matches query");
+  assert(typed.suggestions.some((s) => s.label.toLowerCase().includes(unique.toLowerCase())), "suggestion label matches query");
+
+  await prisma.product.update({ where: { id: product.id }, data: { isActive: false } });
 
   const categoryMatch = await getSearchRecommendations("fruit");
   assert(categoryMatch.suggestions.some((s) => s.type === "category" || s.type === "product"), "partial query returns category or product matches");

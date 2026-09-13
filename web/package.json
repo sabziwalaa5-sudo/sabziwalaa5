@@ -34,21 +34,25 @@
     "@capacitor/network": "^6.0.4",
     "@capacitor/splash-screen": "^6.0.4",
     "@capacitor/status-bar": "^6.0.3",
+    "@prisma/client": "^6.5.0",
     "@supabase/supabase-js": "^2.39.8",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "lucide-react": "^0.468.0",
     "next": "^16.2.10",
-    "@prisma/client": "^6.5.0",
+    "nodemailer": "^10.0.9",
+    "pdfkit": "^0.20.2",
     "prisma": "^6.5.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "tsx": "^4.23.12",
-    "typescript": "^5",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19"
+    "typescript": "^5"
   },
   "devDependencies": {
-    "@capacitor/cli": "^6.2.1"
+    "@capacitor/cli": "^6.2.1",
+    "@types/nodemailer": "^8.0.1",
+    "@types/pdfkit": "^0.17.6"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

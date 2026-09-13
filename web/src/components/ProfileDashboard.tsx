@@ -27,7 +27,8 @@ import {
   Calendar,
   ChevronRight,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  Eye
 } from "lucide-react";
 
 interface ProfileDashboardProps {
@@ -107,10 +108,20 @@ export default function ProfileDashboard({
   const handleReorder = (orderItems: any[]) => {
     const newCart: { [key: string]: number } = {};
     orderItems.forEach((item) => {
-      newCart[item.productId] = item.quantity;
+      if (item.productId) {
+        newCart[item.productId] = item.qty ?? item.quantity ?? 1;
+      }
     });
     setCart(newCart);
     alert("Reordered! Items have been added to your cart.");
+  };
+
+  const orderStatusLabel = (order: any) => order.orderStatus || order.status || "Pending";
+  const isDelivered = (order: any) => ["Delivered", "DELIVERED"].includes(orderStatusLabel(order));
+  const isCancelled = (order: any) => ["Cancelled", "REJECTED", "CANCELLED"].includes(orderStatusLabel(order));
+  const isActiveDelivery = (order: any) => {
+    const status = orderStatusLabel(order);
+    return ["Pending", "Confirmed", "Packed", "Out for Delivery", "PLACED", "ACCEPTED", "OUT_FOR_DELIVERY"].includes(status);
   };
 
   const handleAddNewPayment = (e: React.FormEvent) => {
@@ -308,7 +319,7 @@ export default function ProfileDashboard({
                     <div className="card-premium stat-card" style={{ padding: "24px" }}>
                       <TrendingUp size={24} color="var(--warning)" />
                       <div style={{ fontSize: "2rem", fontWeight: "900", marginTop: "8px" }}>
-                        {customerOrders.filter(o => ["PLACED", "ACCEPTED", "PACKED", "OUT_FOR_DELIVERY"].includes(o.status)).length}
+                        {customerOrders.filter((o) => isActiveDelivery(o)).length}
                       </div>
                       <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-3)", fontWeight: 500 }}>Pending Deliveries</p>
                     </div>
@@ -365,15 +376,15 @@ export default function ProfileDashboard({
                             <span style={{ fontSize: "0.8rem", color: "var(--text-3)" }}>Status:</span>
                             <span
                               className={`badge ${
-                                order.status === "DELIVERED"
+                                isDelivered(order)
                                   ? "badge-success"
-                                  : order.status === "REJECTED"
+                                  : isCancelled(order)
                                   ? "badge-danger"
                                   : "badge-warning"
                               }`}
                               style={{ display: "block", fontSize: "0.75rem", textAlign: "center", padding: "2px 8px", marginTop: "2px" }}
                             >
-                              {order.status}
+                              {orderStatusLabel(order)}
                             </span>
                           </div>
                           <div>
@@ -388,18 +399,29 @@ export default function ProfileDashboard({
                         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                           {order.items?.map((item: any, idx: number) => {
                             const prod = productsList.find((p) => p.id === item.productId);
+                            const qty = item.qty ?? item.quantity ?? 1;
+                            const lineTotal = item.subtotal ?? (item.price * qty);
+                            const label = item.name || prod?.name || "Item";
+                            const unit = item.unit || prod?.unit;
                             return (
                               <div key={idx} style={{ display: "flex", justifyItems: "center", justifyContent: "space-between", fontSize: "0.9rem" }}>
                                 <span style={{ color: "var(--text-2)", fontWeight: 500 }}>
-                                  {prod ? `${prod.name_en} (${prod.unit})` : "Item"} <span style={{ color: "var(--text-3)" }}>× {item.quantity}</span>
+                                  {unit ? `${label} (${unit})` : label} <span style={{ color: "var(--text-3)" }}>× {qty}</span>
                                 </span>
-                                <span style={{ fontWeight: 600 }}>₹{(item.price * item.quantity).toFixed(2)}</span>
+                                <span style={{ fontWeight: 600 }}>₹{Number(lineTotal).toFixed(2)}</span>
                               </div>
                             );
                           })}
                         </div>
 
-                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "8px" }}>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "8px", flexWrap: "wrap" }}>
+                          <a
+                            href={`/orders/${order.id}/receipt`}
+                            className="btn btn-ghost"
+                            style={{ border: "1px solid var(--border)", color: "var(--accent)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                          >
+                            <Eye size={14} /> View Receipt
+                          </a>
                           <button
                             onClick={() => handleReorder(order.items)}
                             className="btn btn-ghost"

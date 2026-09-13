@@ -130,12 +130,28 @@ export async function getSearchRecommendations(
           { category: { contains: q, mode: "insensitive" } },
         ],
       },
-      orderBy: [{ rating: "desc" }, { name: "asc" }],
-      take: Math.min(limit, 6),
-      select: { id: true, name: true, hindiName: true, category: true, imageUrl: true },
+      take: Math.min(limit, 12),
+      select: { id: true, name: true, hindiName: true, category: true, imageUrl: true, rating: true, createdAt: true },
     });
 
-    for (const product of products) {
+    const rankProduct = (name: string) => {
+      const value = name.toLowerCase();
+      if (value.startsWith(qLower)) return 0;
+      if (value.includes(qLower)) return 1;
+      return 2;
+    };
+
+    const rankedProducts = products
+      .sort((a, b) => {
+        const rankDiff = rankProduct(a.name) - rankProduct(b.name);
+        if (rankDiff !== 0) return rankDiff;
+        const ratingDiff = Number(b.rating || 0) - Number(a.rating || 0);
+        if (ratingDiff !== 0) return ratingDiff;
+        return b.createdAt.getTime() - a.createdAt.getTime();
+      })
+      .slice(0, Math.min(limit, 6));
+
+    for (const product of rankedProducts) {
       suggestions.push({
         type: "product",
         id: product.id,

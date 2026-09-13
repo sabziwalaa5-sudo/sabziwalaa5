@@ -38,6 +38,7 @@ export function settingsToClient(settings: PlatformSettings) {
     businessPhone: settings.businessPhone,
     businessEmail: settings.businessEmail,
     businessGstin: settings.businessGstin,
+    businessLogoUrl: settings.businessLogoUrl,
   };
 }
 

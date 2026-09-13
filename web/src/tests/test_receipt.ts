@@ -9,7 +9,7 @@ process.env.DATABASE_URL =
 process.env.SEED_DEMO_DATA = process.env.SEED_DEMO_DATA || "1";
 
 import { prisma } from "../lib/db";
-import { createOrder } from "../lib/server/repository";
+import { createOrder, upsertCoupon } from "../lib/server/repository";
 import {
   assertReceiptAccess,
   buildReceiptPayload,
@@ -112,6 +112,54 @@ async function main() {
   });
   assert(true, "Admin staff can access customer receipt");
 
+  // Vendor can access own vendor orders only
+  const vendorOrder = await createOrder({
+    customerId: customerA.id,
+    customerEmail: customerA.email,
+    customerMobile: "9876543210",
+    paymentMethod: "Cash on Delivery",
+    deliveryAddress: "12 Receipt Lane, New Delhi 110038",
+    lines: [{ productId: "p3", quantity: 3 }],
+    idempotencyKey: `receipt-vendor-${Date.now()}`,
+  });
+  await assertReceiptAccess(vendorOrder.id, {
+    customer: null,
+    staff: { email: "raman@gmail.com", role: "VENDOR" },
+  });
+  assert(true, "Vendor staff can access own vendor order receipt");
+  let vendorForbidden = false;
+  try {
+    await assertReceiptAccess(codOrder.id, {
+      customer: null,
+      staff: { email: "raman@gmail.com", role: "VENDOR" },
+    });
+  } catch (e) {
+    vendorForbidden = e instanceof ApiError && e.status === 403;
+  }
+  assert(vendorForbidden, "Vendor staff cannot access another vendor order receipt");
+
+  // Coupon code stored and shown on receipt
+  await upsertCoupon({
+    code: "RCPT20",
+    discountType: "percentage",
+    discountValue: 20,
+    minOrder: 100,
+    maxDiscount: 50,
+  });
+  const couponOrder = await createOrder({
+    customerId: customerA.id,
+    customerEmail: customerA.email,
+    customerMobile: "9876543210",
+    paymentMethod: "Cash on Delivery",
+    deliveryAddress: "12 Receipt Lane, New Delhi 110038",
+    lines: [{ productId: "p1", quantity: 3 }],
+    couponCode: "RCPT20",
+    idempotencyKey: `receipt-coupon-${Date.now()}`,
+  });
+  const couponReceipt = await buildReceiptPayload(couponOrder.id);
+  assert(couponReceipt.totals.couponCode === "RCPT20", "Receipt includes coupon code from order");
+  assert(couponReceipt.totals.couponDiscount > 0, "Receipt includes coupon discount amount");
+
   // Online payment order with failed status
   const onlineOrder = await createOrder({
     customerId: customerA.id,
@@ -185,13 +233,14 @@ async function main() {
       businessAddress: "Rajokri, New Delhi",
       businessPhone: "9999999999",
       businessGstin: "29TEST0000TEST1Z5",
+      businessLogoUrl: "/images/custom-logo.png",
     },
   });
   const branded = await buildReceiptPayload(codOrder.id);
   assert(branded.business.name === "Sabjiwala Test Store", "Receipt loads business name from platform settings");
   assert(branded.business.address?.includes("Rajokri"), "Receipt loads business address from settings");
   assert(branded.business.gstin === "29TEST0000TEST1Z5", "Receipt shows GSTIN when configured");
-  assert(branded.business.logoUrl === "/images/logo.png", "Receipt includes logo path");
+  assert(branded.business.logoUrl === "/images/custom-logo.png", "Receipt loads configurable business logo URL");
 
   // Format helper
   assert(formatInvoiceNumber(2026, 1) === "SZ-2026-000001", "Invoice format helper produces padded sequence");

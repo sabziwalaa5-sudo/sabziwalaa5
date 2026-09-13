@@ -85,7 +85,12 @@ export default function OrderReceipt({ receipt }: Props) {
 
       <section className="order-receipt-totals">
         <div className="order-receipt-total-row"><span>Subtotal</span><span>{formatCurrency(totals.subtotal)}</span></div>
-        {totals.discount > 0 ? (
+        {totals.couponCode && totals.couponDiscount > 0 ? (
+          <div className="order-receipt-total-row"><span>Coupon ({totals.couponCode})</span><span>-{formatCurrency(totals.couponDiscount)}</span></div>
+        ) : null}
+        {totals.discount > totals.couponDiscount ? (
+          <div className="order-receipt-total-row"><span>Other Discount</span><span>-{formatCurrency(totals.discount - totals.couponDiscount)}</span></div>
+        ) : totals.discount > 0 && totals.couponDiscount === 0 ? (
           <div className="order-receipt-total-row"><span>Discount</span><span>-{formatCurrency(totals.discount)}</span></div>
         ) : null}
         <div className="order-receipt-total-row"><span>Delivery Charge</span><span>{formatCurrency(totals.deliveryCharge)}</span></div>

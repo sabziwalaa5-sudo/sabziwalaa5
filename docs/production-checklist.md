@@ -41,6 +41,15 @@ Use this before deploying Sabjiwala to any hosting environment.
 |----------|---------|
 | `SEED_DEMO_DATA` | Set to `1` to load demo catalog via `npm run db:seed` |
 
+## Optional receipt delivery (email / WhatsApp API)
+
+| Variable | Purpose |
+|----------|---------|
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Email receipt with PDF attachment |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM` | WhatsApp API send (share links work without Twilio) |
+
+Receipt PDF download and WhatsApp share links work without these variables.
+
 ## Pre-deploy steps
 
 1. Provision PostgreSQL.
@@ -94,6 +103,8 @@ cd web && npx prisma validate
 ## Health check
 
 Verify `GET /api/health` returns success after deploy.
+
+For receipts (after migrations), confirm a known order returns JSON from `GET /api/orders/{id}/receipt` and PDF from `GET /api/orders/{id}/receipt/pdf`.
 
 ## What is NOT in this checklist
 

@@ -4,11 +4,13 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Store, DollarSign, Package, ShoppingBag, BarChart } from "lucide-react";
-import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PRODUCTS, INITIAL_ORDERS } from "../../lib/sharedState";
+import { useSabjiwalaStore } from "../../hooks/useSabjiwalaStore";
+import { saveProduct, removeProduct, updateOrderStatusOnServer, fetchCategories, type ClientCategory } from "../../lib/storeApi";
 import { resolveUserRole } from "../../lib/resolveRole";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
 import { BrandLogo } from "../../components/BrandLogo";
+import { logger } from "../../lib/logger";
 import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
 import { canAccessPortal } from "../../lib/roles";
 
@@ -26,10 +28,7 @@ export default function VendorPortal() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
-  // Shared States from localStorage
-  const [vendorsList, setVendorsList] = useState(() => getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-  const [productsList, setProductsList] = useState(() => getStoredState(STATE_KEYS.PRODUCTS, INITIAL_PRODUCTS));
-  const [ordersList, setOrdersList] = useState(() => getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
+  const { vendorsList, productsList, setProductsList, ordersList, setOrdersList, reload } = useSabjiwalaStore({ staff: true });
 
   // Edit / Add product states
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
@@ -40,22 +39,16 @@ export default function VendorPortal() {
     price: 0,
     unit: "1 kg",
     image: "🥦",
-    category: "Vegetables",
+    category: "",
+    categoryId: "",
     stock: 100
   });
+  const [categoryList, setCategoryList] = useState<ClientCategory[]>([]);
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    const syncState = () => {
-      setVendorsList(getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-      setProductsList(getStoredState(STATE_KEYS.PRODUCTS, INITIAL_PRODUCTS));
-      setOrdersList(getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
-    };
-
-    window.addEventListener("sabjiwala_state_update", syncState);
-    window.addEventListener("storage", syncState);
 
     fetchStaffSession().then((session) => {
       if (session && canAccessPortal(session.role, "vendor")) {
@@ -77,11 +70,16 @@ export default function VendorPortal() {
     });
 
     return () => {
-      window.removeEventListener("sabjiwala_state_update", syncState);
-      window.removeEventListener("storage", syncState);
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!userEmail) return;
+    fetchCategories(false)
+      .then(setCategoryList)
+      .catch(() => setCategoryList([]));
+  }, [userEmail]);
 
   const verifySessionRole = async (user: any) => {
     const email = user.email || "";
@@ -128,7 +126,7 @@ export default function VendorPortal() {
       await logoutStaffPortal();
       await supabase.auth.signOut();
     } catch (e) {
-      console.error(e);
+      logger.error("Vendor auth error", e);
     } finally {
       setUserEmail(null);
       setUserRole(null);
@@ -149,73 +147,69 @@ export default function VendorPortal() {
   };
 
   // Vendor actions
-  const updateOrderStatus = (orderId: string, newStatus: string) => {
-    const updated = ordersList.map(o => o.id === orderId ? { ...o, orderStatus: newStatus } : o);
-    setOrdersList(updated);
-    setStoredState(STATE_KEYS.ORDERS, updated);
-
-    // Sync selected details view if open
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    const updated = await updateOrderStatusOnServer(orderId, newStatus);
+    setOrdersList((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
     if (selectedOrderDetails && selectedOrderDetails.id === orderId) {
-      setSelectedOrderDetails(prev => prev ? { ...prev, orderStatus: newStatus } : null);
+      setSelectedOrderDetails(updated);
     }
   };
 
-  // Product management actions
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     const vendor = getCurrentVendorRecord();
     if (!vendor) return;
 
     if (editingProduct) {
-      // Edit existing product
-      const updated = productsList.map(p => p.id === editingProduct.id ? {
-        ...p,
+      const saved = await saveProduct({
+        id: editingProduct.id,
+        vendorId: vendor.vendor_id,
         name: productForm.name,
         hindiName: productForm.hindiName,
         price: productForm.price,
         unit: productForm.unit,
         image: productForm.image,
         category: productForm.category,
-        stock: productForm.stock
-      } : p);
-      setProductsList(updated);
-      setStoredState(STATE_KEYS.PRODUCTS, updated);
+        categoryId: productForm.categoryId || undefined,
+        stock: productForm.stock,
+      });
+      setProductsList((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
     } else {
-      // Add new product
-      const newProduct = {
-        id: `p_${Date.now()}`,
+      const saved = await saveProduct({
+        vendorId: vendor.vendor_id,
         name: productForm.name,
         hindiName: productForm.hindiName,
         price: productForm.price,
         oldPrice: Math.round(productForm.price * 1.25),
         unit: productForm.unit,
         image: productForm.image,
-        imageUrl: "",
         category: productForm.category,
+        categoryId: productForm.categoryId || undefined,
         stock: productForm.stock,
-        rating: 5.0,
-        reviewsCount: 1,
-        vendorId: vendor.vendor_id,
-        badge: null as string | null,
-        isSeasonal: false,
-        isFarmFresh: true
-      };
-
-      const updated = [...productsList, newProduct];
-      setProductsList(updated);
-      setStoredState(STATE_KEYS.PRODUCTS, updated);
+        isFarmFresh: true,
+      });
+      setProductsList((prev) => [...prev, saved]);
     }
 
     setProductFormOpen(false);
     setEditingProduct(null);
+    await reload();
   };
 
-  const handleDeleteProduct = (productId: string) => {
+  const handleDeleteProduct = async (productId: string) => {
     if (confirm("Are you sure you want to remove this product from your shop catalog?")) {
-      const updated = productsList.filter(p => p.id !== productId);
-      setProductsList(updated);
-      setStoredState(STATE_KEYS.PRODUCTS, updated);
+      await removeProduct(productId);
+      setProductsList((prev) => prev.filter((p) => p.id !== productId));
     }
+  };
+
+  const vendorCategoryOptions = () => {
+    const active = categoryList.filter((c) => c.isActive);
+    if (editingProduct?.categoryId && !active.some((c) => c.id === editingProduct.categoryId)) {
+      const current = categoryList.find((c) => c.id === editingProduct.categoryId);
+      if (current) return [current, ...active];
+    }
+    return active;
   };
 
   const handleEditClick = (prod: any) => {
@@ -227,6 +221,7 @@ export default function VendorPortal() {
       unit: prod.unit,
       image: prod.image,
       category: prod.category,
+      categoryId: prod.categoryId || "",
       stock: prod.stock
     });
     setProductFormOpen(true);
@@ -234,13 +229,15 @@ export default function VendorPortal() {
 
   const handleAddClick = () => {
     setEditingProduct(null);
+    const defaultCategory = categoryList.find((c) => c.isActive);
     setProductForm({
       name: "",
       hindiName: "",
       price: 0,
       unit: "1 kg",
       image: "🥬",
-      category: "Vegetables",
+      category: defaultCategory?.name || "",
+      categoryId: defaultCategory?.id || "",
       stock: 100
     });
     setProductFormOpen(true);
@@ -300,7 +297,7 @@ export default function VendorPortal() {
                   style={{ padding: "0.6rem 1rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.9rem" }}
                 />
                 <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0.35rem 0 0" }}>
-                  Use <strong>raman@gmail.com</strong> and PIN <strong>Sabjiwala5!</strong>
+                  Use your assigned vendor email and staff PIN.
                 </p>
               </div>
 
@@ -495,6 +492,11 @@ export default function VendorPortal() {
                           <p style={{ margin: 0 }}>📍 Client: <strong>{selectedOrderDetails.customerName}</strong> ({selectedOrderDetails.customerEmail})</p>
                           <p style={{ margin: "0.25rem 0 0" }}>📍 Address: {selectedOrderDetails.deliveryAddress}</p>
                         </div>
+                        <div style={{ marginTop: "1rem" }}>
+                          <a href={`/orders/${selectedOrderDetails.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ fontSize: "0.8rem", padding: "0.4rem 0.75rem", textDecoration: "none" }}>
+                            View Receipt
+                          </a>
+                        </div>
                       </div>
                     ) : (
                       <div className="card" style={{ textAlign: "center", color: "var(--text-secondary)", padding: "3rem 1.5rem", borderRadius: "16px" }}>
@@ -592,10 +594,9 @@ export default function VendorPortal() {
                               <td style={{ padding: "1rem" }}>
                                 <div style={{ display: "flex", gap: "0.5rem" }}>
                                   <button
-                                    onClick={() => {
-                                      const updated = productsList.map(p => p.id === prod.id ? { ...p, stock: Math.max(0, p.stock - 10) } : p);
-                                      setProductsList(updated);
-                                      setStoredState(STATE_KEYS.PRODUCTS, updated);
+                                    onClick={async () => {
+                                      const saved = await saveProduct({ id: prod.id, vendorId: prod.vendorId, name: prod.name, price: prod.price, stock: Math.max(0, prod.stock - 10) });
+                                      setProductsList((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
                                     }}
                                     className="btn btn-secondary"
                                     style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
@@ -603,10 +604,9 @@ export default function VendorPortal() {
                                     -10 {prod.unit}
                                   </button>
                                   <button
-                                    onClick={() => {
-                                      const updated = productsList.map(p => p.id === prod.id ? { ...p, stock: p.stock + 10 } : p);
-                                      setProductsList(updated);
-                                      setStoredState(STATE_KEYS.PRODUCTS, updated);
+                                    onClick={async () => {
+                                      const saved = await saveProduct({ id: prod.id, vendorId: prod.vendorId, name: prod.name, price: prod.price, stock: prod.stock + 10 });
+                                      setProductsList((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
                                     }}
                                     className="btn btn-secondary"
                                     style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
@@ -614,14 +614,13 @@ export default function VendorPortal() {
                                     +10 {prod.unit}
                                   </button>
                                   <button
-                                    onClick={() => {
+                                    onClick={async () => {
                                       const val = prompt(`Enter new stock quantity for ${prod.name} (in ${prod.unit}):`, prod.stock.toString());
                                       if (val !== null) {
                                         const qty = parseFloat(val);
                                         if (!isNaN(qty) && qty >= 0) {
-                                          const updated = productsList.map(p => p.id === prod.id ? { ...p, stock: qty } : p);
-                                          setProductsList(updated);
-                                          setStoredState(STATE_KEYS.PRODUCTS, updated);
+                                          const saved = await saveProduct({ id: prod.id, vendorId: prod.vendorId, name: prod.name, price: prod.price, stock: qty });
+                                          setProductsList((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
                                         }
                                       }
                                     }}
@@ -819,12 +818,24 @@ export default function VendorPortal() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
                   <label style={{ fontSize: "0.8rem", fontWeight: "600" }}>Category</label>
                   <select
-                    value={productForm.category}
-                    onChange={(e) => setProductForm(prev => ({ ...prev, category: e.target.value }))}
+                    required
+                    value={productForm.categoryId}
+                    onChange={(e) => {
+                      const selected = vendorCategoryOptions().find((c) => c.id === e.target.value);
+                      setProductForm((prev) => ({
+                        ...prev,
+                        categoryId: e.target.value,
+                        category: selected?.name || prev.category,
+                      }));
+                    }}
                     style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }}
                   >
-                    <option value="Vegetables">Vegetables</option>
-                    <option value="Fruits">Fruits</option>
+                    <option value="" disabled>Select category</option>
+                    {vendorCategoryOptions().map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}{cat.isActive ? "" : " (inactive)"}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

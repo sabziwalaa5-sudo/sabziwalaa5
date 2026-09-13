@@ -4,11 +4,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { Eye, Shield, Clock, MapPin, Truck, Check, X, ArrowLeft, DollarSign, List, ToggleLeft, ToggleRight, Info } from "lucide-react";
-import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_ORDERS } from "../../lib/sharedState";
+import { useSabjiwalaStore } from "../../hooks/useSabjiwalaStore";
+import { updateOrderStatusOnServer } from "../../lib/storeApi";
 import { resolveUserRole } from "../../lib/resolveRole";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
 import { BrandLogo } from "../../components/BrandLogo";
+import { logger } from "../../lib/logger";
 import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
 import { canAccessPortal } from "../../lib/roles";
 
@@ -27,9 +29,7 @@ export default function RiderPortal() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
-  // Shared States from localStorage
-  const [vendorsList, setVendorsList] = useState(() => getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-  const [ordersList, setOrdersList] = useState(() => getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
+  const { vendorsList, ordersList, setOrdersList } = useSabjiwalaStore({ staff: true });
 
   // Rider position tracking state
   const [driverPosition, setDriverPosition] = useState<{ lat: number; lng: number } | null>(null);
@@ -41,13 +41,6 @@ export default function RiderPortal() {
 
   useEffect(() => {
     setMounted(true);
-    const syncState = () => {
-      setVendorsList(getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-      setOrdersList(getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
-    };
-
-    window.addEventListener("sabjiwala_state_update", syncState);
-    window.addEventListener("storage", syncState);
 
     fetchStaffSession().then((session) => {
       if (session && canAccessPortal(session.role, "rider")) {
@@ -69,8 +62,6 @@ export default function RiderPortal() {
     });
 
     return () => {
-      window.removeEventListener("sabjiwala_state_update", syncState);
-      window.removeEventListener("storage", syncState);
       subscription.unsubscribe();
     };
   }, []);
@@ -172,7 +163,7 @@ export default function RiderPortal() {
       await logoutStaffPortal();
       await supabase.auth.signOut();
     } catch (e) {
-      console.error(e);
+      logger.error("Rider auth error", e);
     } finally {
       setUserEmail(null);
       setUserRole(null);
@@ -181,10 +172,9 @@ export default function RiderPortal() {
   };
 
   // Status transition handler
-  const updateOrderStatus = (orderId: string, newStatus: string) => {
-    const updated = ordersList.map(o => o.id === orderId ? { ...o, orderStatus: newStatus } : o);
-    setOrdersList(updated);
-    setStoredState(STATE_KEYS.ORDERS, updated);
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    const updated = await updateOrderStatusOnServer(orderId, newStatus);
+    setOrdersList((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
   };
 
   const getActiveRiderOrders = () => {
@@ -244,7 +234,7 @@ export default function RiderPortal() {
                   style={{ padding: "0.6rem 1rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.9rem" }}
                 />
                 <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0.35rem 0 0" }}>
-                  Use <strong>rider@gmail.com</strong> and PIN <strong>Sabjiwala5!</strong>
+                  Use your assigned rider email and staff PIN.
                 </p>
               </div>
 

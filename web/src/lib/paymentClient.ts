@@ -60,6 +60,7 @@ export async function createPaymentOnServer(input: {
 export async function verifyPaymentOnServer(input: {
   paymentId: string;
   checkoutToken: string;
+  orderId?: string;
   razorpay_order_id?: string;
   razorpay_payment_id?: string;
   razorpay_signature?: string;

@@ -1,24 +1,21 @@
-const LIVE_SUPABASE_URL = "https://qbcchkhjbrijrqubzvtk.supabase.co";
-const LIVE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_zsvJF9EmiuER-zpMuHd7gg_c9MEY-ql";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || LIVE_SUPABASE_URL;
-
 export const SUPABASE_UNAVAILABLE_MESSAGE =
   "Sign-in is unavailable because the auth server hostname does not exist. You can still browse the catalog.";
 
 export function getSupabaseUrl(): string {
-  return supabaseUrl.replace(/\/$/, "");
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  return url ? url.replace(/\/$/, "") : "";
 }
 
 export function getSupabaseAnonKey(): string {
   return (
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    LIVE_SUPABASE_PUBLISHABLE_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    ""
   );
 }
 
 export function isSupabaseConfigured(url: string = getSupabaseUrl()): boolean {
+  if (!url) return false;
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return false;

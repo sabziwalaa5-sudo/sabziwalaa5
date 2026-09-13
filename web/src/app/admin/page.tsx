@@ -3,20 +3,39 @@
 
 import React, { useState, useEffect } from "react";
 import { supabase, startGoogleOAuth } from "../../lib/supabase";
-import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Settings, Gift, FileText, ShoppingBag, Store, Users, Tag, AlertTriangle, Truck } from "lucide-react";
-import { STATE_KEYS, getStoredState, setStoredState, INITIAL_VENDORS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_WALLETS, INITIAL_COUPONS, INITIAL_CAMPAIGNS } from "../../lib/sharedState";
+import { Eye, Edit2, Trash2, Shield, Plus, Minus, Info, Check, X, ArrowLeft, Settings, Gift, FileText, ShoppingBag, Store, Users, Tag, AlertTriangle, Truck, Printer, Download } from "lucide-react";
+import { INITIAL_CAMPAIGNS } from "../../lib/catalogSeed";
+import { useSabjiwalaStore } from "../../hooks/useSabjiwalaStore";
+import {
+  saveProduct,
+  removeProduct,
+  saveVendor,
+  saveCoupon,
+  saveSettings,
+  updateOrderStatusOnServer,
+  fetchCategories,
+  fetchSections,
+  type ClientCategory,
+  type ClientSection,
+} from "../../lib/storeApi";
 import { resolveUserRole } from "../../lib/resolveRole";
-import { getPlatformSettings, setPlatformSettings, INITIAL_SETTINGS } from "../../lib/platformSettings";
+import { INITIAL_SETTINGS } from "../../lib/platformSettings";
 import PortalNav, { StaffLoginLinks } from "../../components/PortalNav";
 import AppLoadingShell from "../../components/AppLoadingShell";
 import { BrandLogo } from "../../components/BrandLogo";
+import CategoryManager from "../../components/admin/CategoryManager";
+import SectionManager from "../../components/admin/SectionManager";
+import ProductImageUpload from "../../components/admin/ProductImageUpload";
+import { logger } from "../../lib/logger";
 import { fetchStaffSession, loginStaffPortal, logoutStaffPortal } from "../../lib/staffClient";
 import { canAccessPortal } from "../../lib/roles";
 import { INITIAL_RIDERS } from "../../lib/sharedState";
 
 export default function AdminPortal() {
   const [mounted, setMounted] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<"vendors" | "riders" | "customers" | "orders" | "products" | "coupons" | "rewards" | "reports" | "settings">("vendors");
+  const [activeSubTab, setActiveSubTab] = useState<
+    "vendors" | "riders" | "customers" | "orders" | "products" | "categories" | "sections" | "coupons" | "rewards" | "reports" | "settings"
+  >("vendors");
 
   // Auth State
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -28,13 +47,21 @@ export default function AdminPortal() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
-  // Shared States from localStorage
-  const [vendorsList, setVendorsList] = useState(() => getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-  const [productsList, setProductsList] = useState(() => getStoredState(STATE_KEYS.PRODUCTS, INITIAL_PRODUCTS));
-  const [ordersList, setOrdersList] = useState(() => getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
-  const [wallets, setWallets] = useState(() => getStoredState(STATE_KEYS.WALLETS, INITIAL_WALLETS));
-  const [availableCoupons, setAvailableCoupons] = useState(() => getStoredState(STATE_KEYS.COUPONS, INITIAL_COUPONS));
-  const [bonusCampaigns, setBonusCampaigns] = useState(() => getStoredState(STATE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS));
+  const {
+    productsList,
+    setProductsList,
+    vendorsList,
+    setVendorsList,
+    ordersList,
+    setOrdersList,
+    wallets,
+    availableCoupons,
+    setAvailableCoupons,
+    bonusCampaigns,
+    platformSettings,
+    reload,
+  } = useSabjiwalaStore({ staff: true, includeWallets: true });
+  const [localCampaigns, setLocalCampaigns] = useState(bonusCampaigns);
 
   // Edit / Add product states
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
@@ -45,10 +72,15 @@ export default function AdminPortal() {
     price: 0,
     unit: "1 kg",
     image: "🥬",
-    category: "Vegetables",
+    category: "",
+    categoryId: "",
     stock: 100,
-    vendorId: ""
+    vendorId: "",
+    imageUrl: "",
+    sectionIds: [] as string[],
   });
+  const [categoryList, setCategoryList] = useState<ClientCategory[]>([]);
+  const [manualSections, setManualSections] = useState<ClientSection[]>([]);
 
   // Edit / Add Vendor states
   const [editingVendor, setEditingVendor] = useState<any | null>(null);
@@ -79,28 +111,30 @@ export default function AdminPortal() {
   const [minOrderThreshold, setMinOrderThreshold] = useState(INITIAL_SETTINGS.minOrderThreshold);
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(INITIAL_SETTINGS.freeDeliveryThreshold);
   const [settingsSavedAt, setSettingsSavedAt] = useState<string | null>(null);
+  const [businessName, setBusinessName] = useState("Sabjiwala");
+  const [businessTagline, setBusinessTagline] = useState("Fresh Groceries Delivered");
+  const [businessAddress, setBusinessAddress] = useState("");
+  const [businessPhone, setBusinessPhone] = useState("");
+  const [businessEmail, setBusinessEmail] = useState("");
+  const [businessGstin, setBusinessGstin] = useState("");
+  const [businessLogoUrl, setBusinessLogoUrl] = useState("/images/logo.png");
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    const syncState = () => {
-      setVendorsList(getStoredState(STATE_KEYS.VENDORS, INITIAL_VENDORS));
-      setProductsList(getStoredState(STATE_KEYS.PRODUCTS, INITIAL_PRODUCTS));
-      setOrdersList(getStoredState(STATE_KEYS.ORDERS, INITIAL_ORDERS));
-      setWallets(getStoredState(STATE_KEYS.WALLETS, INITIAL_WALLETS));
-      setAvailableCoupons(getStoredState(STATE_KEYS.COUPONS, INITIAL_COUPONS));
-      setBonusCampaigns(getStoredState(STATE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS));
-      const settings = getPlatformSettings();
-      setRewardSettings(settings.rewardSettings);
-      setMaintenanceMode(settings.maintenanceMode);
-      setMinOrderThreshold(settings.minOrderThreshold);
-      setFreeDeliveryThreshold(settings.freeDeliveryThreshold);
-    };
-
-    window.addEventListener("sabjiwala_state_update", syncState);
-    window.addEventListener("storage", syncState);
-    syncState();
+    setRewardSettings(platformSettings.rewardSettings);
+    setMaintenanceMode(platformSettings.maintenanceMode);
+    setMinOrderThreshold(platformSettings.minOrderThreshold);
+    setFreeDeliveryThreshold(platformSettings.freeDeliveryThreshold);
+    const ps = platformSettings as Record<string, unknown>;
+    if (ps.businessName != null) setBusinessName(String(ps.businessName || ""));
+    if (ps.businessTagline != null) setBusinessTagline(String(ps.businessTagline || ""));
+    if (ps.businessAddress != null) setBusinessAddress(String(ps.businessAddress || ""));
+    if (ps.businessPhone != null) setBusinessPhone(String(ps.businessPhone || ""));
+    if (ps.businessEmail != null) setBusinessEmail(String(ps.businessEmail || ""));
+    if (ps.businessGstin != null) setBusinessGstin(String(ps.businessGstin || ""));
+    if (ps.businessLogoUrl != null) setBusinessLogoUrl(String(ps.businessLogoUrl || "/images/logo.png"));
 
     fetchStaffSession().then((session) => {
       if (session && canAccessPortal(session.role, "admin")) {
@@ -108,6 +142,11 @@ export default function AdminPortal() {
         setUserRole(session.role);
       }
     });
+
+    fetchCategories(false).then(setCategoryList).catch(() => undefined);
+    fetchSections(false, true).then((rows) => {
+      setManualSections(rows.filter((s) => ["MANUAL", "FEATURED", "DEALS"].includes(s.sectionType)));
+    }).catch(() => undefined);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -122,26 +161,53 @@ export default function AdminPortal() {
     });
 
     return () => {
-      window.removeEventListener("sabjiwala_state_update", syncState);
-      window.removeEventListener("storage", syncState);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [platformSettings]);
 
-  const persistPlatformSettings = (next: Partial<{
+  const persistPlatformSettings = async (next: Partial<{
     maintenanceMode: boolean;
     minOrderThreshold: number;
     freeDeliveryThreshold: number;
     rewardSettings: typeof rewardSettings;
+    businessName: string;
+    businessTagline: string;
+    businessAddress: string;
+    businessPhone: string;
+    businessEmail: string;
+    businessGstin: string;
+    businessLogoUrl: string;
   }>) => {
     const merged = {
       maintenanceMode: next.maintenanceMode ?? maintenanceMode,
       minOrderThreshold: next.minOrderThreshold ?? minOrderThreshold,
       freeDeliveryThreshold: next.freeDeliveryThreshold ?? freeDeliveryThreshold,
       rewardSettings: next.rewardSettings ?? rewardSettings,
+      businessName: next.businessName ?? businessName,
+      businessTagline: next.businessTagline ?? businessTagline,
+      businessAddress: next.businessAddress ?? businessAddress,
+      businessPhone: next.businessPhone ?? businessPhone,
+      businessEmail: next.businessEmail ?? businessEmail,
+      businessGstin: next.businessGstin ?? businessGstin,
+      businessLogoUrl: next.businessLogoUrl ?? businessLogoUrl,
     };
-    setPlatformSettings(merged);
+    await saveSettings({
+      maintenanceMode: merged.maintenanceMode,
+      minOrderThreshold: merged.minOrderThreshold,
+      freeDeliveryThreshold: merged.freeDeliveryThreshold,
+      rewardEnabled: merged.rewardSettings.enabled,
+      rewardEarningRate: merged.rewardSettings.earningRate,
+      rewardPointValue: merged.rewardSettings.pointValue,
+      businessName: merged.businessName || null,
+      businessTagline: merged.businessTagline || null,
+      businessAddress: merged.businessAddress || null,
+      businessPhone: merged.businessPhone || null,
+      businessEmail: merged.businessEmail || null,
+      businessGstin: merged.businessGstin || null,
+      businessLogoUrl: merged.businessLogoUrl || null,
+    });
     setSettingsSavedAt(new Date().toLocaleTimeString("en-IN"));
+    await reload();
   };
 
   const verifySessionRole = async (user: any) => {
@@ -202,7 +268,7 @@ export default function AdminPortal() {
       await logoutStaffPortal();
       await supabase.auth.signOut();
     } catch (e) {
-      console.error(e);
+      logger.error("Admin auth error", e);
     } finally {
       setUserEmail(null);
       setUserRole(null);
@@ -211,23 +277,23 @@ export default function AdminPortal() {
   };
 
   // Vendor actions
-  const handleSaveVendor = (e: React.FormEvent) => {
+  const handleSaveVendor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingVendor) {
-      const updated = vendorsList.map(v => v.vendor_id === editingVendor.vendor_id ? {
-        ...v,
+      const saved = await saveVendor({
+        vendor_id: editingVendor.vendor_id,
         vendor_name: vendorForm.vendor_name,
         shop_name: vendorForm.shop_name,
         mobile: vendorForm.mobile,
         email: vendorForm.email,
         address: vendorForm.address,
-        status: vendorForm.status
-      } : v);
-      setVendorsList(updated);
-      setStoredState(STATE_KEYS.VENDORS, updated);
+        status: vendorForm.status,
+        lat: editingVendor.lat,
+        lng: editingVendor.lng,
+      });
+      setVendorsList((prev) => prev.map((v) => (v.vendor_id === saved.vendor_id ? saved : v)));
     } else {
-      const newVendor = {
-        vendor_id: `v_${Date.now()}`,
+      const saved = await saveVendor({
         vendor_name: vendorForm.vendor_name,
         shop_name: vendorForm.shop_name,
         mobile: vendorForm.mobile,
@@ -235,120 +301,93 @@ export default function AdminPortal() {
         address: vendorForm.address,
         status: vendorForm.status,
         lat: 28.5305,
-        lng: 77.1048
-      };
-      const updated = [...vendorsList, newVendor];
-      setVendorsList(updated);
-      setStoredState(STATE_KEYS.VENDORS, updated);
+        lng: 77.1048,
+      });
+      setVendorsList((prev) => [...prev, saved]);
     }
     setVendorFormOpen(false);
     setEditingVendor(null);
   };
 
-  const toggleVendorStatus = (vendorId: string) => {
-    const updated = vendorsList.map(v => {
-      if (v.vendor_id === vendorId) {
-        return { ...v, status: v.status === "Active" ? "Inactive" : "Active" };
-      }
-      return v;
-    });
-    setVendorsList(updated);
-    setStoredState(STATE_KEYS.VENDORS, updated);
+  const toggleVendorStatus = async (vendorId: string) => {
+    const vendor = vendorsList.find((v) => v.vendor_id === vendorId);
+    if (!vendor) return;
+    const nextStatus = vendor.status === "Active" ? "Inactive" : "Active";
+    const saved = await saveVendor({ ...vendor, status: nextStatus });
+    setVendorsList((prev) => prev.map((v) => (v.vendor_id === vendorId ? saved : v)));
   };
 
-  // Order actions
-  const handleUpdateOrderStatus = (orderId: string, status: string) => {
-    const updated = ordersList.map(o => o.id === orderId ? { ...o, orderStatus: status } : o);
-    setOrdersList(updated);
-    setStoredState(STATE_KEYS.ORDERS, updated);
+  const handleUpdateOrderStatus = async (orderId: string, status: string) => {
+    const updated = await updateOrderStatusOnServer(orderId, status);
+    setOrdersList((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
     if (selectedOrderDetails && selectedOrderDetails.id === orderId) {
-      setSelectedOrderDetails(prev => prev ? { ...prev, orderStatus: status } : null);
+      setSelectedOrderDetails(updated);
     }
   };
 
-  // Product actions
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingProduct) {
-      const updated = productsList.map(p => p.id === editingProduct.id ? {
-        ...p,
-        name: productForm.name,
-        hindiName: productForm.hindiName,
-        price: productForm.price,
-        unit: productForm.unit,
-        image: productForm.image,
-        category: productForm.category,
-        stock: productForm.stock,
-        vendorId: productForm.vendorId
-      } : p);
-      setProductsList(updated);
-      setStoredState(STATE_KEYS.PRODUCTS, updated);
-    } else {
-      const newProduct = {
-        id: `p_${Date.now()}`,
-        name: productForm.name,
-        hindiName: productForm.hindiName,
-        price: productForm.price,
-        oldPrice: Math.round(productForm.price * 1.25),
-        unit: productForm.unit,
-        image: productForm.image,
-        imageUrl: "",
-        category: productForm.category,
-        stock: productForm.stock,
-        rating: 5.0,
-        reviewsCount: 1,
-        vendorId: productForm.vendorId || vendorsList[0]?.vendor_id,
-        badge: null as string | null,
-        isSeasonal: false,
-        isFarmFresh: true
-      };
+    const selectedCategory = categoryList.find((c) => c.id === productForm.categoryId);
+    const payload = {
+      vendorId: productForm.vendorId || vendorsList[0]?.vendor_id,
+      name: productForm.name,
+      hindiName: productForm.hindiName,
+      price: productForm.price,
+      unit: productForm.unit,
+      image: productForm.image,
+      category: selectedCategory?.name || productForm.category,
+      categoryId: productForm.categoryId || undefined,
+      stock: productForm.stock,
+      sectionIds: productForm.sectionIds,
+      imageUrl: productForm.imageUrl || undefined,
+    };
 
-      const updated = [...productsList, newProduct];
-      setProductsList(updated);
-      setStoredState(STATE_KEYS.PRODUCTS, updated);
+    if (editingProduct) {
+      const saved = await saveProduct({ id: editingProduct.id, ...payload });
+      setProductsList((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+      setEditingProduct(saved);
+    } else {
+      const saved = await saveProduct({
+        ...payload,
+        oldPrice: Math.round(productForm.price * 1.25),
+        isFarmFresh: true,
+      });
+      setProductsList((prev) => [...prev, saved]);
+      setEditingProduct(saved);
     }
-    setProductFormOpen(false);
-    setEditingProduct(null);
   };
 
-  const handleDeleteProduct = (id: string) => {
+  const handleDeleteProduct = async (id: string) => {
     if (confirm("Delete product?")) {
-      const updated = productsList.filter(p => p.id !== id);
-      setProductsList(updated);
-      setStoredState(STATE_KEYS.PRODUCTS, updated);
+      await removeProduct(id);
+      setProductsList((prev) => prev.filter((p) => p.id !== id));
     }
   };
 
   // Coupon actions
-  const handleSaveCoupon = (e: React.FormEvent) => {
+  const handleSaveCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newCoupon = {
+    const saved = await saveCoupon({
       code: couponForm.code.toUpperCase(),
       discountType: couponForm.discountType,
       discountValue: couponForm.discountValue,
       minOrder: couponForm.minOrder,
-      maxDiscount: couponForm.maxDiscount
-    };
-    const updated = [...availableCoupons, newCoupon];
-    setAvailableCoupons(updated);
-    setStoredState(STATE_KEYS.COUPONS, updated);
+      maxDiscount: couponForm.maxDiscount,
+    });
+    setAvailableCoupons((prev) => [...prev.filter((c) => c.code !== saved.code), saved]);
     setCouponFormOpen(false);
     setCouponForm({ code: "", discountType: "percentage", discountValue: 10, minOrder: 100, maxDiscount: 50 });
   };
 
-  const handleDeleteCoupon = (code: string) => {
+  const handleDeleteCoupon = async (code: string) => {
     if (confirm("Delete coupon?")) {
-      const updated = availableCoupons.filter(c => c.code !== code);
-      setAvailableCoupons(updated);
-      setStoredState(STATE_KEYS.COUPONS, updated);
+      setAvailableCoupons((prev) => prev.filter((c) => c.code !== code));
+      await reload();
     }
   };
 
-  // Campaigns
   const toggleCampaignStatus = (id: string) => {
-    const updated = bonusCampaigns.map(c => c.id === id ? { ...c, active: !c.active } : c);
-    setBonusCampaigns(updated);
-    setStoredState(STATE_KEYS.CAMPAIGNS, updated);
+    setLocalCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, active: !c.active } : c)));
   };
 
   // Export CSV
@@ -432,7 +471,7 @@ export default function AdminPortal() {
                   style={{ padding: "0.6rem 1rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.9rem" }}
                 />
                 <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0.35rem 0 0" }}>
-                  Live staff PIN (change with STAFF_BOOTSTRAP_PASSWORD): <strong>Sabjiwala5!</strong>
+                  Staff PIN is configured with the STAFF_BOOTSTRAP_PASSWORD environment variable.
                 </p>
               </div>
 
@@ -503,6 +542,8 @@ export default function AdminPortal() {
               { id: "customers", label: "Customers Profiles", icon: <Users size={15} /> },
               { id: "orders", label: "All Orders", icon: <ShoppingBag size={15} /> },
               { id: "products", label: "Organic Catalog", icon: <Plus size={15} /> },
+              { id: "categories", label: "Categories", icon: <Tag size={15} /> },
+              { id: "sections", label: "Storefront Sections", icon: <FileText size={15} /> },
               { id: "coupons", label: "Coupons", icon: <Tag size={15} /> },
               { id: "rewards", label: "Rewards Ledger", icon: <Gift size={15} /> },
               { id: "reports", label: "System Telemetry", icon: <FileText size={15} /> },
@@ -674,8 +715,9 @@ export default function AdminPortal() {
                             <td style={{ padding: "0.75rem 1rem", fontWeight: "700" }}>₹{o.totalAmount}</td>
                             <td style={{ padding: "0.75rem 1rem" }}><span className="badge badge-success">{o.orderStatus}</span></td>
                             <td style={{ padding: "0.75rem 1rem" }}>
-                              <div style={{ display: "flex", gap: "0.35rem" }}>
-                                <button onClick={() => setSelectedOrderDetails(o)} className="btn btn-secondary" style={{ padding: "0.2rem 0.4rem", fontSize: "0.7rem" }}><Eye size={12} /></button>
+                              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
+                                <button onClick={() => setSelectedOrderDetails(o)} className="btn btn-secondary" style={{ padding: "0.2rem 0.4rem", fontSize: "0.7rem" }} title="Quick view"><Eye size={12} /></button>
+                                <a href={`/orders/${o.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ padding: "0.2rem 0.4rem", fontSize: "0.7rem", textDecoration: "none" }} title="View receipt"><FileText size={12} /></a>
                                 <select
                                   value={o.orderStatus}
                                   onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
@@ -699,7 +741,10 @@ export default function AdminPortal() {
                   <div>
                     {selectedOrderDetails ? (
                       <div className="card" style={{ borderRadius: "16px" }}>
-                        <h4 style={{ fontWeight: "800", borderBottom: "1px solid var(--border)", paddingBlockEnd: "0.5rem" }}>Bill Detail: {selectedOrderDetails.id}</h4>
+                        <h4 style={{ fontWeight: "800", borderBottom: "1px solid var(--border)", paddingBlockEnd: "0.5rem" }}>Order: {selectedOrderDetails.id}</h4>
+                        {selectedOrderDetails.invoiceNumber ? (
+                          <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "0.5rem" }}>Invoice: {selectedOrderDetails.invoiceNumber}</p>
+                        ) : null}
                         <div style={{ marginBlock: "1rem", display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "0.85rem" }}>
                           {selectedOrderDetails.items.map((it: any, idx: number) => (
                             <div key={idx} style={{ display: "flex", justifyContent: "space-between" }}>
@@ -712,6 +757,17 @@ export default function AdminPortal() {
                           <div style={{ display: "flex", justifyContent: "space-between" }}><span>Subtotal</span><span>₹{selectedOrderDetails.subtotal}</span></div>
                           <div style={{ display: "flex", justifyContent: "space-between" }}><span>Delivery charge</span><span>₹{selectedOrderDetails.deliveryCharges}</span></div>
                           <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "700", color: "var(--accent)" }}><span>Total Amount</span><span>₹{selectedOrderDetails.totalAmount}</span></div>
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border)" }}>
+                          <a href={`/orders/${selectedOrderDetails.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }}>
+                            <FileText size={12} /> View Receipt
+                          </a>
+                          <a href={`/orders/${selectedOrderDetails.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }} onClick={(e) => { e.preventDefault(); const w = window.open(`/orders/${selectedOrderDetails.id}/receipt`, "_blank"); w?.addEventListener("load", () => w.print()); }}>
+                            <Printer size={12} /> Print
+                          </a>
+                          <a href={`/api/orders/${selectedOrderDetails.id}/receipt/pdf`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }}>
+                            <Download size={12} /> Download PDF
+                          </a>
                         </div>
                       </div>
                     ) : (
@@ -731,7 +787,20 @@ export default function AdminPortal() {
                   <h3 style={{ fontSize: "1.25rem", fontWeight: "800" }}>Platform Products Catalog</h3>
                   <button onClick={() => {
                     setEditingProduct(null);
-                    setProductForm({ name: "", hindiName: "", price: 0, unit: "1 kg", image: "🥦", category: "Vegetables", stock: 100, vendorId: vendorsList[0]?.vendor_id });
+                    const defaultCategory = categoryList[0];
+                    setProductForm({
+                      name: "",
+                      hindiName: "",
+                      price: 0,
+                      unit: "1 kg",
+                      image: "🥦",
+                      category: defaultCategory?.name || "",
+                      categoryId: defaultCategory?.id || "",
+                      stock: 100,
+                      vendorId: vendorsList[0]?.vendor_id || "",
+                      imageUrl: "",
+                      sectionIds: [],
+                    });
                     setProductFormOpen(true);
                   }} className="btn btn-primary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.85rem", borderRadius: "8px" }}><Plus size={16} /> Add Product</button>
                 </div>
@@ -760,9 +829,26 @@ export default function AdminPortal() {
                             <td style={{ padding: "1rem" }}><span className="badge badge-secondary">{vendor ? vendor.shop_name : "General Hub"}</span></td>
                             <td style={{ padding: "1rem" }}>
                               <div style={{ display: "flex", gap: "0.35rem" }}>
-                                <button onClick={() => {
+                                <button onClick={async () => {
+                                  const sections = await fetchSections(false, true);
+                                  const assigned = sections
+                                    .filter((s) => ["MANUAL", "FEATURED", "DEALS"].includes(s.sectionType) && s.productIds?.includes(prod.id))
+                                    .map((s) => s.id);
+                                  const matchedCategory = categoryList.find((c) => c.name === prod.category || c.id === prod.categoryId);
                                   setEditingProduct(prod);
-                                  setProductForm({ name: prod.name, hindiName: prod.hindiName, price: prod.price, unit: prod.unit, image: prod.image, category: prod.category, stock: prod.stock, vendorId: prod.vendorId });
+                                  setProductForm({
+                                    name: prod.name,
+                                    hindiName: prod.hindiName || "",
+                                    price: prod.price,
+                                    unit: prod.unit,
+                                    image: prod.image || "🥬",
+                                    category: matchedCategory?.name || prod.category,
+                                    categoryId: prod.categoryId || matchedCategory?.id || "",
+                                    stock: prod.stock,
+                                    vendorId: prod.vendorId,
+                                    imageUrl: prod.imageUrl || "",
+                                    sectionIds: assigned,
+                                  });
                                   setProductFormOpen(true);
                                 }} className="btn btn-secondary" style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}>Edit</button>
                                 <button onClick={() => handleDeleteProduct(prod.id)} className="btn btn-secondary" style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem", borderColor: "var(--danger)", color: "var(--danger)" }}>Delete</button>
@@ -776,6 +862,10 @@ export default function AdminPortal() {
                 </div>
               </div>
             )}
+
+            {activeSubTab === "categories" && <CategoryManager />}
+
+            {activeSubTab === "sections" && <SectionManager products={productsList} />}
 
             {/* F. COUPONS TAB */}
             {activeSubTab === "coupons" && (
@@ -877,7 +967,7 @@ export default function AdminPortal() {
                       </tr>
                     </thead>
                     <tbody>
-                      {bonusCampaigns.map(c => (
+                      {localCampaigns.map(c => (
                         <tr key={c.id} style={{ borderBottom: "1px solid var(--border)", fontSize: "0.85rem" }}>
                           <td style={{ padding: "1rem" }}><strong>{c.name}</strong></td>
                           <td style={{ padding: "1rem", color: "var(--accent)", fontWeight: "bold" }}>+{c.points} points</td>
@@ -971,6 +1061,51 @@ export default function AdminPortal() {
                   <p className="t-caption" style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
                     These settings apply immediately to the customer storefront and native apps at the same origin.
                     {settingsSavedAt ? ` Last synced ${settingsSavedAt}.` : ""}
+                  </p>
+                </div>
+
+                <div className="card" style={{ borderRadius: "16px", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                  <h4 style={{ fontWeight: "800", fontSize: "1rem" }}>Business Details (Receipts & Invoices)</h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Business Name</label>
+                      <input type="text" value={businessName} onChange={(e) => { setBusinessName(e.target.value); persistPlatformSettings({ businessName: e.target.value }); }} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Tagline</label>
+                      <input type="text" value={businessTagline} onChange={(e) => { setBusinessTagline(e.target.value); persistPlatformSettings({ businessTagline: e.target.value }); }} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }} />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                    <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Business Address</label>
+                    <textarea value={businessAddress} onChange={(e) => { setBusinessAddress(e.target.value); persistPlatformSettings({ businessAddress: e.target.value }); }} rows={2} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem", resize: "vertical" }} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Phone</label>
+                      <input type="text" value={businessPhone} onChange={(e) => { setBusinessPhone(e.target.value); persistPlatformSettings({ businessPhone: e.target.value }); }} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Email</label>
+                      <input type="email" value={businessEmail} onChange={(e) => { setBusinessEmail(e.target.value); persistPlatformSettings({ businessEmail: e.target.value }); }} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>GSTIN (optional)</label>
+                      <input type="text" value={businessGstin} onChange={(e) => { setBusinessGstin(e.target.value); persistPlatformSettings({ businessGstin: e.target.value }); }} style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }} />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                    <label style={{ fontSize: "0.85rem", fontWeight: "600" }}>Logo URL (receipts & branding)</label>
+                    <input
+                      type="text"
+                      value={businessLogoUrl}
+                      onChange={(e) => { setBusinessLogoUrl(e.target.value); persistPlatformSettings({ businessLogoUrl: e.target.value }); }}
+                      placeholder="/images/logo.png"
+                      style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }}
+                    />
+                  </div>
+                  <p className="t-caption" style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                    These details appear on customer receipts and invoices. Use a site path like /images/logo.png or a full HTTPS image URL.
                   </p>
                 </div>
               </div>
@@ -1132,15 +1267,58 @@ export default function AdminPortal() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
                   <label style={{ fontSize: "0.8rem", fontWeight: "600" }}>Category</label>
                   <select
-                    value={productForm.category}
-                    onChange={(e) => setProductForm(prev => ({ ...prev, category: e.target.value }))}
+                    value={productForm.categoryId}
+                    onChange={(e) => {
+                      const next = categoryList.find((c) => c.id === e.target.value);
+                      setProductForm((prev) => ({
+                        ...prev,
+                        categoryId: e.target.value,
+                        category: next?.name || prev.category,
+                      }));
+                    }}
+                    required
                     style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.85rem" }}
                   >
-                    <option value="Vegetables">Vegetables</option>
-                    <option value="Fruits">Fruits</option>
+                    <option value="">Select category</option>
+                    {categoryList.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
                   </select>
                 </div>
               </div>
+
+              <ProductImageUpload
+                productId={editingProduct?.id}
+                imageUrl={productForm.imageUrl}
+                onUploaded={(url) => setProductForm((prev) => ({ ...prev, imageUrl: url }))}
+                onRemoved={() => setProductForm((prev) => ({ ...prev, imageUrl: "" }))}
+              />
+
+              {manualSections.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Storefront Sections (manual)</label>
+                  {manualSections.map((section) => (
+                    <label key={section.id} style={{ display: "flex", gap: 8, fontSize: 13, alignItems: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={productForm.sectionIds.includes(section.id)}
+                        onChange={(e) => {
+                          setProductForm((prev) => ({
+                            ...prev,
+                            sectionIds: e.target.checked
+                              ? [...prev.sectionIds, section.id]
+                              : prev.sectionIds.filter((id) => id !== section.id),
+                          }));
+                        }}
+                      />
+                      {section.name} ({section.sectionType})
+                    </label>
+                  ))}
+                  <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0 }}>
+                    Best Sellers and New Arrivals are calculated automatically from sales and creation date.
+                  </p>
+                </div>
+              )}
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>

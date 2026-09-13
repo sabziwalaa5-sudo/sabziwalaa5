@@ -765,7 +765,7 @@ export default function AdminPortal() {
                           <a href={`/orders/${selectedOrderDetails.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }} onClick={(e) => { e.preventDefault(); const w = window.open(`/orders/${selectedOrderDetails.id}/receipt`, "_blank"); w?.addEventListener("load", () => w.print()); }}>
                             <Printer size={12} /> Print
                           </a>
-                          <a href={`/orders/${selectedOrderDetails.id}/receipt`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }} onClick={(e) => { e.preventDefault(); const w = window.open(`/orders/${selectedOrderDetails.id}/receipt`, "_blank"); w?.addEventListener("load", () => w.print()); }}>
+                          <a href={`/api/orders/${selectedOrderDetails.id}/receipt/pdf`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: "0.75rem", padding: "0.35rem 0.65rem", textDecoration: "none" }}>
                             <Download size={12} /> Download PDF
                           </a>
                         </div>

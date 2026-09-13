@@ -16,6 +16,8 @@ import {
   ensureOrderInvoiceNumber,
 } from "../lib/server/receipt";
 import { formatInvoiceNumber } from "../lib/server/invoiceNumber";
+import { generateReceiptPdf } from "../lib/server/receiptPdf";
+import { buildWhatsAppShareUrl, getSmtpConfig, getTwilioWhatsAppConfig } from "../lib/server/receiptDelivery";
 import { ensurePlatformSettings, seedDemoCatalogIfEnabled } from "../lib/server/bootstrap";
 import { ApiError } from "../lib/server/auth";
 
@@ -241,6 +243,24 @@ async function main() {
   assert(branded.business.address?.includes("Rajokri"), "Receipt loads business address from settings");
   assert(branded.business.gstin === "29TEST0000TEST1Z5", "Receipt shows GSTIN when configured");
   assert(branded.business.logoUrl === "/images/custom-logo.png", "Receipt loads configurable business logo URL");
+
+  // Server PDF generation
+  const pdfBuffer = await generateReceiptPdf(await buildReceiptPayload(codOrder.id));
+  assert(pdfBuffer.length > 500, "Server generates non-empty PDF buffer");
+  assert(pdfBuffer.subarray(0, 4).toString() === "%PDF", "PDF buffer has valid PDF header");
+
+  // WhatsApp share URL
+  const shareUrl = buildWhatsAppShareUrl(
+    await buildReceiptPayload(codOrder.id),
+    `http://localhost:3001/orders/${codOrder.id}/receipt`,
+    "9876543210"
+  );
+  assert(shareUrl.includes("wa.me/919876543210"), "WhatsApp share URL targets customer phone");
+  assert(shareUrl.includes("text="), "WhatsApp share URL includes encoded message");
+
+  // Delivery providers remain optional until configured
+  assert(getSmtpConfig() === null || typeof getSmtpConfig()?.host === "string", "SMTP config helper is safe without env");
+  assert(getTwilioWhatsAppConfig() === null || typeof getTwilioWhatsAppConfig()?.from === "string", "Twilio config helper is safe without env");
 
   // Format helper
   assert(formatInvoiceNumber(2026, 1) === "SZ-2026-000001", "Invoice format helper produces padded sequence");
